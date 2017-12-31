@@ -191,8 +191,8 @@ public class RequestParamRequestObjectBuilder implements RequestObjectBuilder {
         if (jsonObjectClaimAttributes != null) {
             //To iterate claim attributes object to fetch the attribute key and value for the fetched
             // requested claim in the fetched claim requestor
+            Map<String, String> claimAttributesMap = new HashMap<>();
             for (Map.Entry<String, Object> claimAttributes : jsonObjectClaimAttributes.entrySet()) {
-                Map<String, String> claimAttributesMap = new HashMap<>();
                 if (jsonObjectClaimAttributes.get(claimAttributes.getKey()) != null) {
                     claimAttributeValue = jsonObjectClaimAttributes.get(claimAttributes.getKey()).toString();
                 }
