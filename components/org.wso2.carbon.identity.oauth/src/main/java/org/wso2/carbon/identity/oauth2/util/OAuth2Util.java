@@ -1587,9 +1587,7 @@ public class OAuth2Util {
     public static String getThumbPrint(String tenantDomain, int tenantId) throws IdentityOAuth2Exception {
 
         try {
-
             Certificate certificate = getCertificate(tenantDomain, tenantId);
-
             // TODO: maintain a hashmap with tenants' pubkey thumbprints after first initialization
 
             //generate the SHA-1 thumbprint of the certificate
