@@ -86,8 +86,10 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.security.Key;
+import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.Certificate;
 import java.security.interfaces.RSAPublicKey;
 import java.sql.Timestamp;
 import java.text.ParseException;
@@ -208,6 +210,7 @@ public class OAuth2Util {
     //Precompile PKCE Regex pattern for performance improvement
     private static Pattern pkceCodeVerifierPattern = Pattern.compile("[\\w\\-\\._~]+");
     private static Map<Integer, Key> privateKeys = new ConcurrentHashMap<>();
+    private static Map<Integer, Certificate> publicCerts = new ConcurrentHashMap<Integer, Certificate>();
 
     private OAuth2Util() {
 
@@ -1572,6 +1575,100 @@ public class OAuth2Util {
             privateKey = privateKeys.get(tenantId);
         }
         return privateKey;
+    }
+
+    /**
+     * Get thumbprint value of the certificate
+     * @param tenantDomain
+     * @param tenantId
+     * @return thumbprint value
+     * @throws IdentityOAuth2Exception
+     */
+    public static String getThumbPrint(String tenantDomain, int tenantId) throws IdentityOAuth2Exception {
+
+        try {
+            Certificate certificate = getCertificate(tenantDomain, tenantId);
+            // TODO: maintain a hashmap with tenants' pubkey thumbprints after first initialization
+
+            //generate the SHA-1 thumbprint of the certificate
+            MessageDigest digestValue = MessageDigest.getInstance("SHA-1");
+            byte[] der = certificate.getEncoded();
+            digestValue.update(der);
+            byte[] digestInBytes = digestValue.digest();
+
+            String publicCertThumbprint = hexify(digestInBytes);
+            String base64EncodedThumbPrint = new String(
+                    new Base64(0, null, true).encode(publicCertThumbprint.getBytes(Charsets.UTF_8)), Charsets.UTF_8);
+            return base64EncodedThumbPrint;
+
+        } catch (Exception e) {
+            String error = "Error in obtaining certificate for tenant " + tenantDomain;
+            throw new IdentityOAuth2Exception(error, e);
+        }
+    }
+
+    /**
+     * Retrieve the public certificate
+     * @param tenantDomain
+     * @param tenantId
+     * @return Certificate object
+     * @throws Exception
+     */
+    private static Certificate getCertificate(String tenantDomain, int tenantId) throws Exception {
+        Certificate publicCert = null;
+
+        if (!(publicCerts.containsKey(tenantId))) {
+
+            try {
+                IdentityTenantUtil.initializeRegistry(tenantId, tenantDomain);
+            } catch (IdentityException e) {
+                throw new IdentityOAuth2Exception("Error occurred while loading registry for tenant " + tenantDomain,
+                        e);
+            }
+
+            // get tenant's key store manager
+            KeyStoreManager tenantKSM = KeyStoreManager.getInstance(tenantId);
+
+            KeyStore keyStore = null;
+            if (!tenantDomain.equals(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME)) {
+                // derive key store name
+                String ksName = tenantDomain.trim().replace(".", "-");
+                String jksName = ksName + ".jks";
+                keyStore = tenantKSM.getKeyStore(jksName);
+                publicCert = keyStore.getCertificate(tenantDomain);
+            } else {
+                publicCert = tenantKSM.getDefaultPrimaryCertificate();
+            }
+            if (publicCert != null) {
+                publicCerts.put(tenantId, publicCert);
+            }
+        } else {
+            publicCert = publicCerts.get(tenantId);
+        }
+        return publicCert;
+    }
+
+    /**
+     * Helper method to hexify a byte array.
+     * TODO:need to verify the logic
+     *
+     * @param bytes
+     * @return hexadecimal representation
+     */
+    private static String hexify(byte bytes[]) {
+
+        char[] hexDigits = {
+                '0', '1', '2', '3', '4', '5', '6', '7', +'8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
+        };
+
+        StringBuilder buf = new StringBuilder(bytes.length * 2);
+
+        for (int i = 0; i < bytes.length; ++i) {
+            buf.append(hexDigits[(bytes[i] & 0xf0) >> 4]);
+            buf.append(hexDigits[bytes[i] & 0x0f]);
+        }
+
+        return buf.toString();
     }
 
     private static Key derivePrivateKey(String tenantDomain, KeyStoreManager tenantKSM) throws IdentityOAuth2Exception {

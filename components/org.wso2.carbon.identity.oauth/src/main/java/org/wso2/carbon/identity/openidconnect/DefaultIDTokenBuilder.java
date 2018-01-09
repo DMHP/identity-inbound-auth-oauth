@@ -121,7 +121,6 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
     private static final String OPENID_CONNECT_AUDIENCES = "Audiences";
     private static final String OPENID_CONNECT_AUDIENCE = "Audience";
     private static final String OPENID_IDP_ENTITY_ID = "IdPEntityId";
-    private static final String kid = "d0ec514a32b6f88c0abd12a2840699bdd3deba9d";
 
     private static final Log log = LogFactory.getLog(DefaultIDTokenBuilder.class);
     private static final String REQUEST_OBJECT = "requestObject";
@@ -444,7 +443,6 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
     protected String signJWTWithRSA(JWTClaimsSet jwtClaimsSet, OAuthTokenReqMessageContext request)
             throws IdentityOAuth2Exception {
         try {
-
             boolean isJWTSignedWithSPKey = OAuthServerConfiguration.getInstance().isJWTSignedWithSPKey();
             String tenantDomain = null;
             if (isJWTSignedWithSPKey) {
@@ -458,7 +456,7 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
             Key privateKey = OAuth2Util.getPrivateKey(tenantDomain, tenantId);
             JWSSigner signer = new RSASSASigner((RSAPrivateKey) privateKey);
             JWSHeader header = new JWSHeader((JWSAlgorithm) signatureAlgorithm);
-            header.setKeyID(kid);
+            header.setKeyID(getThumbPrint(tenantDomain, tenantId));
             header.setX509CertThumbprint(new Base64URL(getThumbPrint(tenantDomain, tenantId)));
             SignedJWT signedJWT = new SignedJWT(header, jwtClaimsSet);
             signedJWT.sign(signer);
@@ -470,7 +468,6 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
 
     protected String signWithHMAC(JWTClaimsSet jwtClaimsSet, OAuthTokenReqMessageContext request) throws IdentityOAuth2Exception {
         try {
-
             boolean isJWTSignedWithSPKey = OAuthServerConfiguration.getInstance().isJWTSignedWithSPKey();
             String tenantDomain = null;
             if (isJWTSignedWithSPKey) {
@@ -484,7 +481,7 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
                     , tenantDomain);
             JWSSigner signer = new MACSigner(getHMACSharedSecret(serviceProvider));
             JWSHeader header = new JWSHeader((JWSAlgorithm) signatureAlgorithm);
-            header.setKeyID(kid);
+            header.setKeyID(getThumbPrint(tenantDomain, tenantId));
             header.setX509CertThumbprint(new Base64URL(getThumbPrint(tenantDomain, tenantId)));
             SignedJWT signedJWT = new SignedJWT(header, jwtClaimsSet);
             signedJWT.sign(signer);
@@ -525,7 +522,6 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
     protected String signJWTWithRSA(JWTClaimsSet jwtClaimsSet, OAuthAuthzReqMessageContext request)
             throws IdentityOAuth2Exception {
         try {
-
             boolean isJWTSignedWithSPKey = OAuthServerConfiguration.getInstance().isJWTSignedWithSPKey();
             String tenantDomain = null;
             if (isJWTSignedWithSPKey) {
@@ -540,7 +536,7 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
             JWSSigner signer = new RSASSASigner((RSAPrivateKey) privateKey);
             JWSHeader header = new JWSHeader((JWSAlgorithm) signatureAlgorithm);
             header.setX509CertThumbprint(new Base64URL(getThumbPrint(tenantDomain, tenantId)));
-            header.setKeyID(kid);
+            header.setKeyID(getThumbPrint(tenantDomain, tenantId));
             SignedJWT signedJWT = new SignedJWT(header, jwtClaimsSet);
             signedJWT.sign(signer);
             return signedJWT.serialize();
@@ -552,7 +548,6 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
     protected String signWithHMAC(JWTClaimsSet jwtClaimsSet, OAuthAuthzReqMessageContext request)
             throws IdentityOAuth2Exception {
         try {
-
             boolean isJWTSignedWithSPKey = OAuthServerConfiguration.getInstance().isJWTSignedWithSPKey();
             String tenantDomain = null;
             if (isJWTSignedWithSPKey) {
@@ -567,7 +562,7 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
             JWSSigner signer = new MACSigner(getHMACSharedSecret(serviceProvider));
             JWSHeader header = new JWSHeader((JWSAlgorithm) signatureAlgorithm);
             header.setX509CertThumbprint(new Base64URL(getThumbPrint(tenantDomain, tenantId)));
-            header.setKeyID(kid);
+            header.setKeyID(getThumbPrint(tenantDomain, tenantId));
             SignedJWT signedJWT = new SignedJWT(header, jwtClaimsSet);
             signedJWT.sign(signer);
             return signedJWT.serialize();
