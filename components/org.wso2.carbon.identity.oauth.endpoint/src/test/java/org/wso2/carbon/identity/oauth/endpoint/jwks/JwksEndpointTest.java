@@ -20,11 +20,12 @@ package org.wso2.carbon.identity.oauth.endpoint.jwks;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.mockito.Mock;
 import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.testng.PowerMockTestCase;
+import org.powermock.modules.testng.PowerMockObjectFactory;
+import org.testng.IObjectFactory;
 import org.testng.annotations.BeforeTest;
 import org.testng.annotations.DataProvider;
+import org.testng.annotations.ObjectFactory;
 import org.testng.annotations.Test;
 import org.wso2.carbon.base.CarbonBaseConstants;
 import org.wso2.carbon.base.MultitenantConstants;
@@ -50,6 +51,7 @@ import java.util.Map;
 
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyString;
+import static org.powermock.api.mockito.PowerMockito.mock;
 import static org.powermock.api.mockito.PowerMockito.mockStatic;
 import static org.powermock.api.mockito.PowerMockito.when;
 import static org.testng.Assert.assertEquals;
@@ -57,22 +59,10 @@ import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
 
 @PrepareForTest({
-                        CarbonUtils.class, IdentityTenantUtil.class, IdentityUtil.class, OAuthServerConfiguration.class,
-                        KeyStoreManager.class, OAuth2Util.class
+                        OAuthServerConfiguration.class, IdentityUtil.class, CarbonUtils.class, IdentityTenantUtil.class,
+                        KeyStoreManager.class, OAuth2Util.class, ServerConfiguration.class
                 })
-public class JwksEndpointTest extends PowerMockTestCase {
-
-    @Mock
-    ServerConfiguration serverConfiguration;
-
-    @Mock
-    OAuthServerConfiguration oAuthServerConfiguration;
-
-    @Mock
-    TokenPersistenceProcessor tokenPersistenceProcessor;
-
-    @Mock
-    KeyStoreManager keyStoreManager;
+public class JwksEndpointTest {
 
     private static final String CERT_THUMB_PRINT = "generatedCertThrumbPrint";
     private static final String ALG = "RS256";
@@ -93,17 +83,22 @@ public class JwksEndpointTest extends PowerMockTestCase {
     public Object[][] provideTenantDomain() {
         return new Object[][] {
                 { null, MultitenantConstants.SUPER_TENANT_ID }, { "foo.com", 1 }, { "invalid.com", -1 },
-                };
+                { "", MultitenantConstants.SUPER_TENANT_ID }
+        };
     }
 
     @Test(dataProvider = "provideTenantDomain")
     public void testJwks(String tenantDomain, int tenantId) throws Exception {
+        ServerConfiguration serverConfiguration = mock(ServerConfiguration.class);
+        mockStatic(ServerConfiguration.class);
+        KeyStoreManager keyStoreManager = mock(KeyStoreManager.class);
         Path keystorePath = Paths
                 .get(System.getProperty(CarbonBaseConstants.CARBON_HOME), "repository", "resources", "security",
                         "wso2carbon.jks");
         mockOAuthServerConfiguration();
         mockStatic(CarbonUtils.class);
         when(CarbonUtils.getServerConfiguration()).thenReturn(serverConfiguration);
+        when(ServerConfiguration.getInstance()).thenReturn(serverConfiguration);
         when(serverConfiguration.getFirstProperty("Security.KeyStore.Location")).thenReturn(keystorePath.toString());
         when(serverConfiguration.getFirstProperty("Security.KeyStore.Password")).thenReturn("wso2carbon");
         when(serverConfiguration.getFirstProperty("Security.KeyStore.KeyAlias")).thenReturn("wso2carbon");
@@ -163,9 +158,11 @@ public class JwksEndpointTest extends PowerMockTestCase {
     }
 
     private void mockOAuthServerConfiguration() throws Exception {
+        OAuthServerConfiguration oauthServerConfigurationMock = mock(OAuthServerConfiguration.class);
         mockStatic(OAuthServerConfiguration.class);
-        when(OAuthServerConfiguration.getInstance()).thenReturn(oAuthServerConfiguration);
-        when(oAuthServerConfiguration.getPersistenceProcessor()).thenReturn(tokenPersistenceProcessor);
+        when(OAuthServerConfiguration.getInstance()).thenReturn(oauthServerConfigurationMock);
+        TokenPersistenceProcessor tokenPersistenceProcessor = mock(TokenPersistenceProcessor.class);
+        when(oauthServerConfigurationMock.getPersistenceProcessor()).thenReturn(tokenPersistenceProcessor);
     }
 
     private KeyStore getKeyStoreFromFile(String keystoreName, String password) throws Exception {
@@ -176,6 +173,11 @@ public class JwksEndpointTest extends PowerMockTestCase {
         KeyStore keystore = KeyStore.getInstance(KeyStore.getDefaultType());
         keystore.load(file, password.toCharArray());
         return keystore;
+    }
+
+    @ObjectFactory
+    public IObjectFactory getObjectFactory() {
+        return new PowerMockObjectFactory();
     }
 
 }

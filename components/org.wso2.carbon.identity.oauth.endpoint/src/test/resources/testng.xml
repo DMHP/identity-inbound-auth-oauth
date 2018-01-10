@@ -21,7 +21,7 @@
     <test name="Util-Tests" preserve-order="true" parallel="false">
         <classes>
             <class name="org.wso2.carbon.identity.oauth.endpoint.util.ClaimUtilTest"/>
-            <!--<class name="org.wso2.carbon.identity.oauth.endpoint.jwks.JwksEndpointTest"/>-->
+            <class name="org.wso2.carbon.identity.oauth.endpoint.jwks.JwksEndpointTest"/>
         </classes>
     </test>
 </suite>
