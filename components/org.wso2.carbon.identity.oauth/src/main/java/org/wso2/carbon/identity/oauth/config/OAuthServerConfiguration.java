@@ -161,11 +161,10 @@ public class OAuthServerConfiguration {
 
     // OpenID Connect configurations
     private String openIDConnectIDTokenBuilderClassName = "org.wso2.carbon.identity.openidconnect.DefaultIDTokenBuilder";
-    private String defaultRequestValidatorClassName = "org.wso2.carbon.identity.openidconnect.RequestObjectValidatorImpl";
+    private Class<RequestObjectValidator> requestValidatorClass = null;
     private String openIDConnectIDTokenCustomClaimsHanlderClassName = "org.wso2.carbon.identity.openidconnect.SAMLAssertionClaimsCallback";
     private IDTokenBuilder openIDConnectIDTokenBuilder = null;
     private Map<String, String> requestObjectBuilderClassNames = new HashMap<>();
-    private RequestObjectValidator requestObjectValidator = null;
     private CustomClaimsCallbackHandler openidConnectIDTokenCustomClaimsCallbackHandler = null;
     private String openIDConnectIDTokenIssuerIdentifier = null;
     private String openIDConnectIDTokenSubClaim = "http://wso2.org/claims/fullname";
@@ -796,28 +795,23 @@ public class OAuthServerConfiguration {
     }
 
     /**
-     * Returns an instance of RequestObjectValidator
+     * Returns an instance of the RequestObjectValidator implementation.
      *
      * @return instance of RequestObjectValidator
      */
     public RequestObjectValidator getRequestObjectValidator() {
-        if (requestObjectValidator == null) {
-            synchronized (RequestObjectValidator.class) {
-                if (requestObjectValidator == null) {
-                    try {
-                        Class clazz =
-                                Thread.currentThread().getContextClassLoader()
-                                        .loadClass(defaultRequestValidatorClassName);
-                        requestObjectValidator = (RequestObjectValidator) clazz.newInstance();
-                    } catch (ClassNotFoundException|InstantiationException|IllegalAccessException e) {
-                        log.warn("Failed to initiate RequestObjectValidator from identity.xml. " +
-                                "Hence initiating the default implementation");
-                        requestObjectValidator = new RequestObjectValidatorImpl();
-                    }
-                }
+
+        if (requestValidatorClass != null) {
+            try {
+                return requestValidatorClass.newInstance();
+            } catch (InstantiationException | IllegalAccessException e) {
+                log.error(String.format("Could not instantiate the request object validator class '%s'. " +
+                        "The default implementation will be used.", requestValidatorClass));
+                return new RequestObjectValidatorImpl();
             }
+        } else {
+            return new RequestObjectValidatorImpl();
         }
-        return requestObjectValidator;
     }
 
     /**
@@ -1705,9 +1699,17 @@ public class OAuthServerConfiguration {
             }
             if (openIDConnectConfigElem.getFirstChildWithName(getQNameWithIdentityNS(ConfigElements.
                     REQUEST_OBJECT_VALIDATOR)) != null) {
-                defaultRequestValidatorClassName =
-                        openIDConnectConfigElem.getFirstChildWithName(getQNameWithIdentityNS(ConfigElements.
-                                REQUEST_OBJECT_VALIDATOR)).getText().trim();
+                String requestValidatorClassName = openIDConnectConfigElem.getFirstChildWithName(getQNameWithIdentityNS(
+                        ConfigElements.REQUEST_OBJECT_VALIDATOR)).getText().trim();
+                try {
+                    requestValidatorClass = (Class<RequestObjectValidator>) Thread.currentThread().
+                            getContextClassLoader().loadClass(requestValidatorClassName);
+                    log.debug(String.format("Loaded the request validator implementation class '%s' as.",
+                            requestValidatorClassName));
+                } catch (ClassNotFoundException e) {
+                    log.warn(String.format("Failed to load the request validator implementation class '%s'. " +
+                            "The default implementation will be used.", requestValidatorClassName), e);
+                }
             }
             if (openIDConnectConfigElem.getFirstChildWithName(getQNameWithIdentityNS(ConfigElements.SIGNATURE_ALGORITHM)) != null) {
                 idTokenSignatureAlgorithm =

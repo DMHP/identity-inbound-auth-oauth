@@ -51,6 +51,7 @@ import java.security.InvalidKeyException;
 import java.security.SignatureException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.Enumeration;
@@ -93,7 +94,58 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
     }
 
     @Override
-    public void validateSignature(String requestObject) throws RequestObjectException {
+    public void validateSignature(String requestObject, Certificate certificate) throws RequestObjectException {
+
+        Certificate certificateForSignatureValidation = certificate;
+
+        if (certificateForSignatureValidation == null) {
+            certificateForSignatureValidation = getCertificateFromRequestThumbprint();
+        }
+
+        RSAPublicKey publicKey = (RSAPublicKey) certificateForSignatureValidation.getPublicKey();
+        JWSVerifier verifier = new RSASSAVerifier(publicKey);
+        SignedJWT signedJWT = null;
+
+        try {
+            signedJWT = SignedJWT.parse(requestObject);
+            if (!signedJWT.verify(verifier)) {
+                throw new RequestObjectException(RequestObjectException.ERROR_CODE_INVALID_REQUEST, "Signature " +
+                        "validation failed.");
+            }
+        } catch (java.text.ParseException | JOSEException e) {
+            throw new RequestObjectException(RequestObjectException.ERROR_CODE_INVALID_REQUEST, e.getMessage());
+        }
+    }
+
+    private Certificate getCertificateFromRequestThumbprint() throws RequestObjectException {
+
+        String thumbPrint = getCertificateThumbprintInRequest();
+
+        if (jwtAssertion != null && jwtSignature != null) {
+            try {
+                KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+
+                keyStore.load(new FileInputStream(buildFilePath(getPropertyValue(OAuthConstants.CLIENT_TRUST_STORE))),
+                        getPropertyValue(OAuthConstants.CLIENT_TRUST_STORE_PASSWORD).toCharArray());
+                String alias = getAliasForX509CertThumb(thumbPrint.getBytes(), keyStore);
+
+                if (StringUtils.isEmpty(alias)) {
+                    log.error("Could not obtain the alias from the certificate.");
+                    throw new RequestObjectException(RequestObjectException.ERROR_CODE_INVALID_REQUEST, "Could not " +
+                            "obtain the alias from the certificate.");
+                }
+
+                return keyStore.getCertificate(alias);
+            } catch (KeyStoreException | CertificateException | NoSuchAlgorithmException | IOException e) {
+                throw new RequestObjectException(RequestObjectException.ERROR_CODE_INVALID_REQUEST, e.getMessage());
+            }
+        } else {
+            throw new RequestObjectException(RequestObjectException.ERROR_CODE_INVALID_REQUEST, "Signature is null.");
+        }
+    }
+
+    private String getCertificateThumbprintInRequest() throws RequestObjectException {
+
         String thumbPrint;
         // The public key corresponding to the key used to sign the message can be any of these header elements:
         // jku, jwk, kid, x5u, x5c, x5t and x5t#s256
@@ -123,7 +175,8 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
         if (log.isDebugEnabled()) {
             log.debug("The certificate thumbPrint value for the certificate is: " + thumbPrint);
         }
-        verifyJWTSignature(thumbPrint, requestObject);
+
+        return thumbPrint;
     }
 
     /**
@@ -150,7 +203,7 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
             //if the request object is a nested jwt then the payload of the jwe is a jws.
             if (encryptedJWT != null && encryptedJWT.getCipherText() != null && encryptedJWT.getCipherText().toString()
                     .split(".").length == NUMBER_OF_PARTS_IN_JWS) {
-                validateSignature(encryptedJWT.getCipherText().toString());
+                validateSignature(encryptedJWT.getCipherText().toString(), oAuth2Parameters.getCertificate());
                 if (log.isDebugEnabled()) {
                     log.debug("As the request object is a nested jwt, passed the payload to validate the signature.");
                 }
@@ -175,7 +228,7 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
             String[] jwtTokenValues = requestObject.split("\\.");
             if (jwtTokenValues.length == NUMBER_OF_PARTS_IN_JWS) {
                 processRequestObject(jwtTokenValues);
-                validateSignature(requestObject);
+                validateSignature(requestObject, oAuth2Parameters.getCertificate());
             } else if (jwtTokenValues.length == NUMBER_OF_PARTS_IN_JWE) {
                 decrypt(requestObject, oAuth2Parameters);
             } else if (jwtTokenValues.length == 1) {
@@ -199,42 +252,6 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
      */
     private String getTenantDomainForDecryption(OAuth2Parameters oAuth2Parameters) {
         return oAuth2Parameters.getTenantDomain();
-    }
-
-    private void verifyJWTSignature(String thumbPrint, String requestObject) throws RequestObjectException {
-        if (jwtAssertion != null && jwtSignature != null) {
-            try {
-                KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-                keyStore.load(new FileInputStream(buildFilePath(getPropertyValue(OAuthConstants.CLIENT_TRUST_STORE))),
-                        getPropertyValue(OAuthConstants.CLIENT_TRUST_STORE_PASSWORD).toCharArray());
-                String alias = getAliasForX509CertThumb(thumbPrint.getBytes(), keyStore);
-
-                if (StringUtils.isEmpty(alias)) {
-                    log.error("Could not obtain the alias from the certificate.");
-                    throw new RequestObjectException(RequestObjectException.ERROR_CODE_INVALID_REQUEST, "Could not obtain" +
-                            " the alias from the certificate.");
-                }
-                verifySignature(requestObject, keyStore, alias);
-            } catch (KeyStoreException | IOException | NoSuchAlgorithmException | CertificateException |
-                    InvalidKeyException | SignatureException | JOSEException | java.text.ParseException e) {
-                throw new RequestObjectException(RequestObjectException.ERROR_CODE_INVALID_REQUEST, e.getMessage());
-            }
-        } else {
-            throw new RequestObjectException(RequestObjectException.ERROR_CODE_INVALID_REQUEST, "Signature is null.");
-        }
-    }
-
-    private void verifySignature(String requestObject, KeyStore keyStore
-            , String alias) throws KeyStoreException, NoSuchAlgorithmException, InvalidKeyException, SignatureException,
-            JOSEException, java.text.ParseException, RequestObjectException {
-        Certificate certificate = keyStore.getCertificate(alias);
-        // Get public key
-        RSAPublicKey publicKey = (RSAPublicKey) certificate.getPublicKey();
-        JWSVerifier verifier = new RSASSAVerifier(publicKey);
-        SignedJWT signedJWT = SignedJWT.parse(requestObject);
-        if(!signedJWT.verify(verifier)){
-            throw new RequestObjectException(RequestObjectException.ERROR_CODE_INVALID_REQUEST,"Signature validation failed.");
-        }
     }
 
     private JSONObject getJsonHeaderObject() throws RequestObjectException {
