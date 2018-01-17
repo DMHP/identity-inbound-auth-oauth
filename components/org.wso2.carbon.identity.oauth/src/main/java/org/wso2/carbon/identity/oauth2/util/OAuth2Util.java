@@ -37,10 +37,12 @@ import org.json.JSONObject;
 import org.wso2.carbon.base.CarbonBaseConstants;
 import org.wso2.carbon.core.util.KeyStoreManager;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
+import org.wso2.carbon.identity.application.common.IdentityApplicationManagementException;
 import org.wso2.carbon.identity.application.common.model.InboundAuthenticationRequestConfig;
 import org.wso2.carbon.identity.application.common.model.Property;
 import org.wso2.carbon.identity.application.common.model.ServiceProvider;
 import org.wso2.carbon.identity.application.common.util.IdentityApplicationConstants;
+import org.wso2.carbon.identity.application.mgt.ApplicationManagementService;
 import org.wso2.carbon.identity.base.IdentityConstants;
 import org.wso2.carbon.identity.base.IdentityException;
 import org.wso2.carbon.identity.core.util.IdentityIOStreamUtils;
@@ -90,6 +92,7 @@ import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
 import java.security.interfaces.RSAPublicKey;
 import java.sql.Timestamp;
 import java.text.ParseException;
@@ -1402,6 +1405,51 @@ public class OAuth2Util {
             AppInfoCache.getInstance().addToCache(clientId, oAuthAppDO);
             return oAuthAppDO;
         }
+    }
+
+    /**
+     * Retrieves and returns the application (service provider) certificate related to the given OAuth app.
+     *
+     * @param oAuthAppDO
+     * @return
+     * @throws IdentityOAuth2Exception
+     */
+    public static Certificate getApplicationCertificate(OAuthAppDO oAuthAppDO)
+            throws IdentityOAuth2Exception {
+
+        // Set the service provider certificate to the OAuth DO.
+        ApplicationManagementService applicationMgtService = OAuth2ServiceComponentHolder.getApplicationMgtService();
+
+        if (applicationMgtService != null) {
+
+            try {
+                String tenantDomain = OAuth2Util.getTenantDomainOfOauthApp(oAuthAppDO);
+                ServiceProvider serviceProvider = applicationMgtService.getServiceProvider(oAuthAppDO
+                        .getApplicationName(), tenantDomain);
+                if (serviceProvider.getCertificateContent() != null) {
+                    return IdentityUtil.convertPEMEncodedContentToCertificate(serviceProvider
+                            .getCertificateContent());
+                }
+            } catch (CertificateException | IdentityApplicationManagementException e) {
+                String errorMessage = String.format("An error occurred while obtaining the certificate for the " +
+                        "OAuth application ('%s')", oAuthAppDO.getOauthConsumerKey());
+                log.error(errorMessage, e);
+                throw new IdentityOAuth2Exception(errorMessage, e);
+            }
+        }else{
+            if (log.isDebugEnabled()) {
+                log.debug(String.format("ApplicationManagementService instance was null while trying to get the " +
+                        "application certificate for the OAuth app '%s'.", oAuthAppDO.getApplicationName()));
+            }
+
+        }
+
+        if(log.isDebugEnabled()){
+            log.debug(String.format("Couldn't find an application certificate for the OAuth app '%s'",
+                    oAuthAppDO.getApplicationName()));
+        }
+
+        return null;
     }
 
     /**

@@ -49,6 +49,7 @@ import org.wso2.carbon.identity.application.common.model.ClaimMapping;
 import org.wso2.carbon.identity.application.common.model.ServiceProvider;
 import org.wso2.carbon.identity.application.common.model.ServiceProviderProperty;
 import org.wso2.carbon.identity.application.mgt.ApplicationManagementService;
+import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.identity.oauth.IdentityOAuthAdminException;
 import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCache;
 import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCacheEntry;
@@ -85,6 +86,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.cert.CertificateException;
 import java.text.ParseException;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -107,6 +109,8 @@ import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response;
+
+import static org.wso2.carbon.identity.core.util.IdentityUtil.convertPEMEncodedContentToCertificate;
 
 @Path("/authorize")
 public class OAuth2AuthzEndpoint {
@@ -774,8 +778,22 @@ public class OAuth2AuthzEndpoint {
         OAuthAuthzRequest oauthRequest = new CarbonOAuthAuthzRequest(req);
 
         OAuth2Parameters params = new OAuth2Parameters();
+        ServiceProvider serviceProvider = getServiceProvider(clientId);
+
+        // If a service provider certificate is available, set it as an OAuth param for the use of
+        // downstream components.
+        if (isServiceProviderSpecificCertAvailable(serviceProvider)) {
+            try {
+                params.setCertificate(convertPEMEncodedContentToCertificate(serviceProvider.getCertificateContent()));
+            } catch (CertificateException e) {
+                log.error("An error occurred while build a certificate object from the PEM content for the " +
+                        "service provider : " + serviceProvider.getApplicationName());
+                return EndpointUtil.getErrorPageURL(OAuth2ErrorCodes.SERVER_ERROR,
+                        "A certificate error occurred.", null);
+            }
+        }
+
         if (EndpointUtil.getOAuthServerConfiguration().isShowDisplayNameInConsentPage()) {
-            ServiceProvider serviceProvider = getServiceProvider(clientId);
             ServiceProviderProperty[] serviceProviderProperties = serviceProvider.getSpProperties();
             for (ServiceProviderProperty serviceProviderProperty : serviceProviderProperties) {
                 if (DISPLAY_NAME.equals(serviceProviderProperty.getName())) {
@@ -971,6 +989,17 @@ public class OAuth2AuthzEndpoint {
             }
             throw new OAuthSystemException("Error when encoding login page URL");
         }
+    }
+
+    /**
+     *
+     * Returns true if an application certificate is available in the given service provider.
+     *
+     * @param serviceProvider
+     * @return
+     */
+    private boolean isServiceProviderSpecificCertAvailable(ServiceProvider serviceProvider) {
+        return serviceProvider.getCertificateContent() != null;
     }
 
     private void handleOIDCRequestObject(OAuthAuthzRequest oauthRequest, OAuth2Parameters parameters)

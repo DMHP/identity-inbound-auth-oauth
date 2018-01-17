@@ -124,4 +124,5 @@ public class OAuthAppDO implements Serializable {
     public String getState() {
         return state;
     }
+
 }
