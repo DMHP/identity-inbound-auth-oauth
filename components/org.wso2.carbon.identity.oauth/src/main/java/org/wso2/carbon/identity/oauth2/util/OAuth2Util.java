@@ -35,6 +35,8 @@ import org.apache.oltu.oauth2.common.message.types.ResponseType;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.wso2.carbon.base.CarbonBaseConstants;
+import org.wso2.carbon.core.util.CryptoException;
+import org.wso2.carbon.core.util.CryptoUtil;
 import org.wso2.carbon.core.util.KeyStoreManager;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
 import org.wso2.carbon.identity.application.common.IdentityApplicationManagementException;
@@ -45,6 +47,7 @@ import org.wso2.carbon.identity.application.common.util.IdentityApplicationConst
 import org.wso2.carbon.identity.application.mgt.ApplicationManagementService;
 import org.wso2.carbon.identity.base.IdentityConstants;
 import org.wso2.carbon.identity.base.IdentityException;
+import org.wso2.carbon.identity.core.util.IdentityDatabaseUtil;
 import org.wso2.carbon.identity.core.util.IdentityIOStreamUtils;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
@@ -60,6 +63,9 @@ import org.wso2.carbon.identity.oauth.dao.OAuthAppDAO;
 import org.wso2.carbon.identity.oauth.dao.OAuthAppDO;
 import org.wso2.carbon.identity.oauth.dao.OAuthConsumerDAO;
 import org.wso2.carbon.identity.oauth.internal.OAuthComponentServiceHolder;
+import org.wso2.carbon.identity.oauth.tokenprocessor.HashingPersistenceProcessor;
+import org.wso2.carbon.identity.oauth.tokenprocessor.PlainTextPersistenceProcessor;
+import org.wso2.carbon.identity.oauth.tokenprocessor.TokenPersistenceProcessor;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 import org.wso2.carbon.identity.oauth2.authz.OAuthAuthzReqMessageContext;
 import org.wso2.carbon.identity.oauth2.config.SpOAuth2ExpiryTimeConfiguration;
@@ -94,6 +100,10 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.interfaces.RSAPublicKey;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.text.ParseException;
 import java.util.ArrayList;
@@ -214,6 +224,7 @@ public class OAuth2Util {
     private static Pattern pkceCodeVerifierPattern = Pattern.compile("[\\w\\-\\._~]+");
     private static Map<Integer, Key> privateKeys = new ConcurrentHashMap<>();
     private static Map<Integer, Certificate> publicCerts = new ConcurrentHashMap<Integer, Certificate>();
+    private static final String OAEP_PREFIX = "OAEP";
 
     private OAuth2Util() {
 
@@ -238,6 +249,48 @@ public class OAuth2Util {
             log.debug("Added OAuthAuthzReqMessageContext to threadlocal");
         }
     }
+
+    public static String appendOaepPrefix(String processedKey){
+        String processedKeyWithPrefix = OAEP_PREFIX + processedKey;
+        return processedKeyWithPrefix;
+    }
+
+    public static boolean isStartWithOaepPrefix(String processedKey){
+       return processedKey.startsWith(OAEP_PREFIX);
+    }
+
+    public static String hashClientSecret(String clientSecret) throws IdentityOAuth2Exception {
+        TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
+        String hashedClientSecret = tokenPersistenceProcessor.getProcessedClientSecret(clientSecret);
+        return hashedClientSecret;
+    }
+
+    public static String hashAuthzCode(String authzCode) throws IdentityOAuth2Exception {
+        TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
+        String hashedAuthzCode = tokenPersistenceProcessor.getProcessedAuthzCode(authzCode);
+        return hashedAuthzCode;
+    }
+
+    public static String hashAccessTokenIdentifier(String accessTokenIdentifier) throws IdentityOAuth2Exception {
+        TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
+        String hashedAccessTokenIdentifier = tokenPersistenceProcessor.getProcessedAccessTokenIdentifier(accessTokenIdentifier);
+        return hashedAccessTokenIdentifier;
+    }
+
+    public static String hashRefreshToken(String refreshToken) throws IdentityOAuth2Exception {
+        TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
+        String hashedrefreshToken = tokenPersistenceProcessor.getProcessedRefreshToken(refreshToken);
+        return hashedrefreshToken;
+    }
+
+    public static String oaepEncrypt(String processedOauthKey) {
+        return OAuth2Util.appendOaepPrefix(processedOauthKey);
+    }
+
+    public static String retrieveOaepEncryptedKey(String encryptedKeyWithPrefix){
+        return encryptedKeyWithPrefix.substring(4);
+    }
+
 
     /**
      *
@@ -1654,6 +1707,34 @@ public class OAuth2Util {
             throw new IdentityOAuth2Exception(error, e);
         }
     }
+
+    /**
+     * Method to check if the new CONSUMER_SECRET_HASH column is available
+     * @throws SQLException
+     */
+    public static boolean checkHashColumn(String tableName, String columnName) throws SQLException {
+        boolean isClientSecretHashColumnAvailable = false;
+        Connection connection = IdentityDatabaseUtil.getDBConnection();
+        DatabaseMetaData md = null;
+        md = connection.getMetaData();
+        ResultSet rs = md.getColumns(null, null, tableName, columnName);
+        if (rs.next()) {
+            isClientSecretHashColumnAvailable = true;
+
+        }
+        return isClientSecretHashColumnAvailable;
+    }
+
+    public static String decryptWithRSA(String cipherText) throws IdentityOAuth2Exception {
+        try {
+            return new String(CryptoUtil.getDefaultCryptoUtil().base64DecodeAndDecryptWithRSA(cipherText),
+                    Charsets.UTF_8);
+        } catch (CryptoException e) {
+
+            throw new IdentityOAuth2Exception("Error while decrypting ciphertext using RSA", e);
+        }
+    }
+
 
     /**
      * Retrieve the public certificate

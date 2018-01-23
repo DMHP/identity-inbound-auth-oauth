@@ -30,6 +30,10 @@ import org.wso2.carbon.identity.base.IdentityRuntimeException;
 import org.wso2.carbon.identity.core.util.IdentityCoreInitializedEvent;
 import org.wso2.carbon.identity.core.util.IdentityDatabaseUtil;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
+import org.wso2.carbon.identity.oauth.internal.OAuthComponentServiceHolder;
+import org.wso2.carbon.identity.oauth.tokenprocessor.EncryptionDecryptionPersistenceProcessor;
+import org.wso2.carbon.identity.oauth.tokenprocessor.TokenPersistenceProcessor;
+import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 import org.wso2.carbon.identity.oauth2.OAuth2Service;
 import org.wso2.carbon.identity.oauth2.OAuth2TokenValidationService;
 import org.wso2.carbon.identity.oauth2.dao.SQLQueries;
@@ -62,6 +66,7 @@ import java.sql.SQLException;
 public class OAuth2ServiceComponent {
     private static Log log = LogFactory.getLog(OAuth2ServiceComponent.class);
     private static BundleContext bundleContext;
+    private TokenPersistenceProcessor persistenceProcessor;
 
     protected void activate(ComponentContext context) {
         int tenantId = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantId();
@@ -125,6 +130,16 @@ public class OAuth2ServiceComponent {
         } else {
             OAuth2ServiceComponentHolder.setPkceEnabled(false);
             log.info("PKCE Support is disabled.");
+        }
+        try {
+            persistenceProcessor = oauthServerConfig.getPersistenceProcessor();
+            if (persistenceProcessor instanceof EncryptionDecryptionPersistenceProcessor) {
+                OAuth2ServiceComponentHolder.setEncryptionDecryptionProcessor(true);
+            } else {
+                OAuth2ServiceComponentHolder.setEncryptionDecryptionProcessor(false);
+            }
+        } catch (IdentityOAuth2Exception e) {
+            log.error("Error occurred while retrieving the TokenPersistenceProcessor configured in identity.xml ");
         }
     }
 
