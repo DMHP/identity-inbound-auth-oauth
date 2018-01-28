@@ -63,6 +63,7 @@ import org.wso2.carbon.identity.oauth.dao.OAuthAppDAO;
 import org.wso2.carbon.identity.oauth.dao.OAuthAppDO;
 import org.wso2.carbon.identity.oauth.dao.OAuthConsumerDAO;
 import org.wso2.carbon.identity.oauth.internal.OAuthComponentServiceHolder;
+import org.wso2.carbon.identity.oauth.tokenprocessor.EncryptionDecryptionPersistenceProcessor;
 import org.wso2.carbon.identity.oauth.tokenprocessor.HashingPersistenceProcessor;
 import org.wso2.carbon.identity.oauth.tokenprocessor.PlainTextPersistenceProcessor;
 import org.wso2.carbon.identity.oauth.tokenprocessor.TokenPersistenceProcessor;
@@ -224,7 +225,15 @@ public class OAuth2Util {
     private static Pattern pkceCodeVerifierPattern = Pattern.compile("[\\w\\-\\._~]+");
     private static Map<Integer, Key> privateKeys = new ConcurrentHashMap<>();
     private static Map<Integer, Certificate> publicCerts = new ConcurrentHashMap<Integer, Certificate>();
-    private static final String OAEP_PREFIX = "OAEP";
+    private static final String OAEP_PREFIX = "CUSTOM_CIPHER_TRANSFORMATION-";
+    private static final String CIPHER_TRANSFORMATION_SYSTEM_PROPERTY = "org.wso2.CipherTransformation";
+    private static final String IDN_OAUTH2_ACCESS_TOKEN = "IDN_OAUTH2_ACCESS_TOKEN";
+    private static final String IDN_OAUTH2_AUTHORIZATION_CODE = "IDN_OAUTH2_AUTHORIZATION_CODE";
+    private static final String ACCESS_TOKEN_HASH = "ACCESS_TOKEN_HASH";
+    private static final String REFRESH_TOKEN_HASH = "REFRESH_TOKEN_HASH";
+    private static final String AUTHORIZATION_CODE_HASH = "AUTHORIZATION_CODE_HASH";
+    private static final String IDN_OAUTH_CONSUMER_APPS = "IDN_OAUTH_CONSUMER_APPS";
+    private static final String CONSUMER_SECRET_HASH = "CONSUMER_SECRET_HASH";
 
     private OAuth2Util() {
 
@@ -255,8 +264,17 @@ public class OAuth2Util {
         return processedKeyWithPrefix;
     }
 
-    public static boolean isStartWithOaepPrefix(String processedKey){
-       return processedKey.startsWith(OAEP_PREFIX);
+    public static boolean isStartWithOaepPrefix(String processedKey) throws IdentityOAuth2Exception {
+        //g.apache.axiom.om.util.Base64.decode(processedKey);
+        try {
+            return CryptoUtil.getDefaultCryptoUtil().base64DecodeAndCheckCustomEncryption(processedKey);
+        } catch (CryptoException e) {
+
+                throw new IdentityOAuth2Exception("Error while checking for custom encryption", e);
+        }
+        /*return new String(CryptoUtil.getDefaultCryptoUtil().base64DecodeAndDecrypt(
+                cipherText), Charsets.UTF_8);
+       return processedKey.startsWith(OAEP_PREFIX);*/
     }
 
     public static String hashClientSecret(String clientSecret) throws IdentityOAuth2Exception {
@@ -1708,22 +1726,7 @@ public class OAuth2Util {
         }
     }
 
-    /**
-     * Method to check if the new CONSUMER_SECRET_HASH column is available
-     * @throws SQLException
-     */
-    public static boolean checkHashColumn(String tableName, String columnName) throws SQLException {
-        boolean isClientSecretHashColumnAvailable = false;
-        Connection connection = IdentityDatabaseUtil.getDBConnection();
-        DatabaseMetaData md = null;
-        md = connection.getMetaData();
-        ResultSet rs = md.getColumns(null, null, tableName, columnName);
-        if (rs.next()) {
-            isClientSecretHashColumnAvailable = true;
 
-        }
-        return isClientSecretHashColumnAvailable;
-    }
 
     public static String decryptWithRSA(String cipherText) throws IdentityOAuth2Exception {
         try {
@@ -1732,6 +1735,16 @@ public class OAuth2Util {
         } catch (CryptoException e) {
 
             throw new IdentityOAuth2Exception("Error while decrypting ciphertext using RSA", e);
+        }
+    }
+
+    public static String encryptWithRSA(String plainText) throws IdentityOAuth2Exception {
+        try {
+            return  CryptoUtil.getDefaultCryptoUtil().encryptAndBase64EncodeWithRSA(
+                    plainText.getBytes(Charsets.UTF_8));
+        } catch (CryptoException e) {
+
+            throw new IdentityOAuth2Exception("Error while encrypting ciphertext using RSA", e);
         }
     }
 
@@ -1817,6 +1830,126 @@ public class OAuth2Util {
             }
         }
         return privateKey;
+    }
+
+    /**
+     * Method to check wether RSA+OAEP encruption algortihm is enabled and EncryptionDecryptionPersistenceProcessor
+     * is enabled.
+     * @return true or false
+     * @throws IdentityOAuth2Exception
+     */
+    public static boolean checkRsaOaepEncryptionEnabled() throws IdentityOAuth2Exception {
+
+        String cipherTransformation = System.getProperty(CIPHER_TRANSFORMATION_SYSTEM_PROPERTY);
+        TokenPersistenceProcessor persistenceProcessor = OAuthServerConfiguration.getInstance()
+                .getPersistenceProcessor();
+        if (cipherTransformation != null
+                && (persistenceProcessor instanceof EncryptionDecryptionPersistenceProcessor)) {
+            return true;
+
+        } else {
+            return false;
+        }
+    }
+
+    /**
+     * Method to check if a new column is available
+     * @throws SQLException
+     */
+    public static boolean checkColumn(String tableName, String columnName) throws IdentityOAuth2Exception {
+        boolean isColumnAvailable = false;
+        Connection connection = IdentityDatabaseUtil.getDBConnection();
+        DatabaseMetaData md = null;
+        try {
+            md = connection.getMetaData();
+
+            ResultSet rs = md.getColumns(null, null, tableName, columnName);
+            if (rs.next()) {
+                isColumnAvailable = true;
+
+            }
+            connection.commit();
+            return isColumnAvailable;
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception(
+                    "Error occurred while checking for column: " + columnName + "and table: " + tableName, e);
+        } finally {
+            IdentityDatabaseUtil.closeConnection(connection);
+        }
+    }
+
+    /**
+     * Method to check if columns to store access token hash, refresh token hash, consumer secret hash and
+     * authorization code hash is available
+     * @return
+     * @throws IdentityOAuth2Exception
+     */
+    public static boolean checkHashColumns() throws IdentityOAuth2Exception {
+        if(isAccessTokenHashColumnCreated() && isAuthzCodeHashColumnCreated() && isConsumerSecretHashColumnCreated()
+                && isRefreshTokenHashColumnCreated()){
+            return true;
+        }else{
+            return false;
+        }
+    }
+    /**
+     * Method to check if a column to store access token hash is available
+     * @return
+     * @throws IdentityOAuth2Exception
+     */
+    private static boolean isAccessTokenHashColumnCreated() throws IdentityOAuth2Exception {
+        if (OAuth2Util.checkColumn(IDN_OAUTH2_ACCESS_TOKEN, ACCESS_TOKEN_HASH) ) {
+            return true;
+        } else {
+            log.error("Required column" + ACCESS_TOKEN_HASH +" missing");
+            return false;
+        }
+
+    }
+
+    /**
+     * Method to check if a column to store refresh token hash is available
+     * @return
+     * @throws IdentityOAuth2Exception
+     */
+    private static boolean isRefreshTokenHashColumnCreated() throws IdentityOAuth2Exception {
+        if (OAuth2Util.checkColumn(IDN_OAUTH2_ACCESS_TOKEN, REFRESH_TOKEN_HASH) ) {
+            return true;
+        } else {
+            log.error("Required column" + REFRESH_TOKEN_HASH +" missing");
+            return false;
+        }
+
+    }
+
+    /**
+     * Method to check if a column to store access authorization code hash is available
+     * @return
+     * @throws IdentityOAuth2Exception
+     */
+    private static boolean isAuthzCodeHashColumnCreated() throws IdentityOAuth2Exception {
+        if (OAuth2Util.checkColumn(IDN_OAUTH2_AUTHORIZATION_CODE, AUTHORIZATION_CODE_HASH) ) {
+            return true;
+        } else {
+            log.error("Required column" + AUTHORIZATION_CODE_HASH +" missing");
+            return false;
+        }
+
+    }
+
+    /**
+     * Method to check if a column to store consumer secret hash is available
+     * @return
+     * @throws IdentityOAuth2Exception
+     */
+    private static boolean isConsumerSecretHashColumnCreated() throws IdentityOAuth2Exception {
+        if (OAuth2Util.checkColumn(IDN_OAUTH_CONSUMER_APPS, CONSUMER_SECRET_HASH) ) {
+            return true;
+        } else {
+            log.error("Required column" + CONSUMER_SECRET_HASH +" missing");
+            return false;
+        }
+
     }
 }
 

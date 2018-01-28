@@ -42,21 +42,14 @@ public class OAuthConsumerDAO {
 
     public static final Log log = LogFactory.getLog(OAuthConsumerDAO.class);
     private TokenPersistenceProcessor persistenceProcessor;
-    private static final String IDN_OAUTH_CONSUMER_APPS = "IDN_OAUTH_CONSUMER_APPS";
-    private static final String CONSUMER_SECRET_HASH = "CONSUMER_SECRET_HASH";
-    private static final String CIPHER_TRANSFORMATION_SYSTEM_PROPERTY = "org.wso2.CipherTransformation";
-    private static boolean rsaOaepEncryptionEnabled = false;
 
     public OAuthConsumerDAO() {
 
         try {
             persistenceProcessor = OAuthServerConfiguration.getInstance().getPersistenceProcessor();
-            checkRsaOaepEncryptionEnabled();
         } catch (IdentityOAuth2Exception e) {
             log.error("Error retrieving TokenPersistenceProcessor. Defaulting to PlainTextProcessor", e);
             persistenceProcessor = new PlainTextPersistenceProcessor();
-        } catch (SQLException e) {
-            log.error("Error when checking for column: " + CONSUMER_SECRET_HASH, e);
         }
 
     }
@@ -80,20 +73,10 @@ public class OAuthConsumerDAO {
             resultSet = prepStmt.executeQuery();
 
             if (resultSet.next()) {
-                if (rsaOaepEncryptionEnabled) {
-                    String processedClientSecretWithPrefix = resultSet.getString(1);
-                    if (OAuth2Util.isStartWithOaepPrefix(processedClientSecretWithPrefix)) {
-                        consumerSecret = persistenceProcessor.getPreprocessedClientSecret(
-                                OAuth2Util.retrieveOaepEncryptedKey(processedClientSecretWithPrefix));
-                    } else {
-                        String decryptedSecretKey = OAuth2Util.decryptWithRSA(resultSet.getString(1));
-                        consumerSecret = decryptedSecretKey;
-                        prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_SECRET);
-                        prepStmt.setString(1, OAuth2Util
-                                .oaepEncrypt(persistenceProcessor.getProcessedClientSecret(decryptedSecretKey)));
-                        prepStmt.setString(2, OAuth2Util.hashClientSecret(decryptedSecretKey));
-                        prepStmt.setString(3, consumerKey);
-                        prepStmt.executeUpdate();
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    consumerSecret = persistenceProcessor.getPreprocessedClientSecret(resultSet.getString(1));
+                    if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
+                        updateNewEncryptedClientSecret(connection, consumerSecret, resultSet.getString(1));
                     }
                 } else {
                     consumerSecret = persistenceProcessor.getPreprocessedClientSecret(resultSet.getString(1));
@@ -459,19 +442,23 @@ public class OAuthConsumerDAO {
     }
 
     /**
-     * Check whether new RSA+OAEP encryption algorithm is enabled
+     * Method to encrypt the client secret which was encrypted with old RSA algorithm  with new RSA+OAEP algorithm.
+     * This will also store a hashed value of the client secret.
+     * @param connection
+     * @param decryptedClientSecret
+     * @param oldEncryptedClientSecret
      * @throws SQLException
+     * @throws IdentityOAuth2Exception
      */
-    private void checkRsaOaepEncryptionEnabled() throws SQLException {
-        String cipherTransformation = System.getProperty(CIPHER_TRANSFORMATION_SYSTEM_PROPERTY);
-        if (cipherTransformation != null && OAuth2ServiceComponentHolder.isEncryptionDecryptionProcessor()) {
-            if (OAuth2Util.checkHashColumn(IDN_OAUTH_CONSUMER_APPS, CONSUMER_SECRET_HASH)) {
-                rsaOaepEncryptionEnabled = true;
-            } else {
-                log.error("Required column" + CONSUMER_SECRET_HASH + " missing.");
-            }
+    private void updateNewEncryptedClientSecret(Connection connection, String decryptedClientSecret,
+            String oldEncryptedClientSecret) throws SQLException, IdentityOAuth2Exception {
+        PreparedStatement prepStmt = null;
+        prepStmt = connection.prepareStatement(SQLQueries.OAuthConsumerDAOSQLQueries.UPDATE_CONSUMER_SECRET);
+        prepStmt.setString(1, persistenceProcessor.getProcessedAccessTokenIdentifier(decryptedClientSecret));
+        prepStmt.setString(2, OAuth2Util.hashClientSecret(decryptedClientSecret));
+        prepStmt.setString(3, oldEncryptedClientSecret);
+        prepStmt.executeUpdate();
 
-        }
     }
 
 }

@@ -21,6 +21,7 @@ package org.wso2.carbon.identity.oauth2.internal;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.osgi.framework.BundleContext;
+import org.osgi.framework.BundleException;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.component.ComponentContext;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
@@ -66,9 +67,9 @@ import java.sql.SQLException;
 public class OAuth2ServiceComponent {
     private static Log log = LogFactory.getLog(OAuth2ServiceComponent.class);
     private static BundleContext bundleContext;
-    private TokenPersistenceProcessor persistenceProcessor;
+    //private TokenPersistenceProcessor persistenceProcessor;
 
-    protected void activate(ComponentContext context) {
+    protected void activate(ComponentContext context) throws  BundleException {
         int tenantId = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantId();
         OAuth2Util.initiateOIDCScopes(tenantId);
         OAuth2Util.initTokenExpiryTimesOfSps(tenantId);
@@ -131,15 +132,17 @@ public class OAuth2ServiceComponent {
             OAuth2ServiceComponentHolder.setPkceEnabled(false);
             log.info("PKCE Support is disabled.");
         }
+
         try {
-            persistenceProcessor = oauthServerConfig.getPersistenceProcessor();
-            if (persistenceProcessor instanceof EncryptionDecryptionPersistenceProcessor) {
-                OAuth2ServiceComponentHolder.setEncryptionDecryptionProcessor(true);
-            } else {
-                OAuth2ServiceComponentHolder.setEncryptionDecryptionProcessor(false);
+            if ((OAuth2Util.checkRsaOaepEncryptionEnabled() && !OAuth2Util.checkHashColumns())) {
+                throw new IdentityOAuth2Exception("Error occurred while checking for RSA OAEP encryption. Please "
+                        + "check wether RSA+OAEP is enabled, EncryptionDecryptionPersistenceProcessor is enabled and "
+                        + "necessary hash columns are created.");
             }
         } catch (IdentityOAuth2Exception e) {
-            log.error("Error occurred while retrieving the TokenPersistenceProcessor configured in identity.xml ");
+            String errorMessage = "Error occurred while checking for RSA OAEP encryption";
+            log.error(errorMessage, e);
+            bundleContext.getBundle(0).stop();
         }
     }
 

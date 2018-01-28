@@ -33,9 +33,6 @@ import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.identity.oauth.common.OAuthConstants;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
-import org.wso2.carbon.identity.oauth.internal.OAuthComponentServiceHolder;
-import org.wso2.carbon.identity.oauth.tokenprocessor.EncryptionDecryptionPersistenceProcessor;
-import org.wso2.carbon.identity.oauth.tokenprocessor.HashingPersistenceProcessor;
 import org.wso2.carbon.identity.oauth.tokenprocessor.PlainTextPersistenceProcessor;
 import org.wso2.carbon.identity.oauth.tokenprocessor.TokenPersistenceProcessor;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
@@ -43,12 +40,12 @@ import org.wso2.carbon.identity.oauth2.internal.OAuth2ServiceComponentHolder;
 import org.wso2.carbon.identity.oauth2.model.AccessTokenDO;
 import org.wso2.carbon.identity.oauth2.model.AuthzCodeDO;
 import org.wso2.carbon.identity.oauth2.model.RefreshTokenValidationDataDO;
+import org.wso2.carbon.identity.oauth2.token.OauthTokenIssuerImpl;
 import org.wso2.carbon.identity.oauth2.util.OAuth2Util;
 import org.wso2.carbon.user.core.util.UserCoreUtil;
 
 import java.sql.Connection;
 import java.sql.DataTruncation;
-import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -101,10 +98,7 @@ public class TokenMgtDAO {
 
     private static final String IDN_OAUTH2_AUTHORIZATION_CODE = "IDN_OAUTH2_AUTHORIZATION_CODE";
 
-    private static final String ACCESS_TOKEN_HASH = "ACCESS_TOKEN_HASH";
-    private static final String REFRESH_TOKEN_HASH = "REFRESH_TOKEN_HASH";
     private static final String CIPHER_TRANSFORMATION_SYSTEM_PROPERTY = "org.wso2.CipherTransformation";
-    private static boolean rsaOaepEncryptionEnabled = false;
     static {
 
         final Log log = LogFactory.getLog(TokenMgtDAO.class);
@@ -143,12 +137,9 @@ public class TokenMgtDAO {
     public TokenMgtDAO() {
         try {
             persistenceProcessor = OAuthServerConfiguration.getInstance().getPersistenceProcessor();
-            checkRsaOaepEncryptionEnabled();
         } catch (IdentityOAuth2Exception e) {
             log.error("Error retrieving TokenPersistenceProcessor. Defaulting to PlainTextProcessor", e);
             persistenceProcessor = new PlainTextPersistenceProcessor();
-        } catch (SQLException e) {
-            log.error("Error when checking for column: " + ACCESS_TOKEN_HASH + " & " + REFRESH_TOKEN_HASH, e);
         }
 
         if (IdentityUtil.getProperty("JDBCPersistenceManager.TokenPersist.Enable") != null) {
@@ -159,8 +150,6 @@ public class TokenMgtDAO {
             tokenPersistRetryCount = Integer.parseInt(IdentityUtil.getProperty("OAuth.TokenPersistence.RetryCount"));
         }
     }
-
-
 
     public void storeAuthorizationCode(String authzCode, String consumerKey, String callbackUrl,
                                        AuthzCodeDO authzCodeDO) throws IdentityOAuth2Exception {
@@ -188,18 +177,17 @@ public class TokenMgtDAO {
         try {
 
             if (OAuth2ServiceComponentHolder.isPkceEnabled()) {
-                if(rsaOaepEncryptionEnabled) {
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
                     prepStmt = connection.prepareStatement(SQLQueries.STORE_AUTHORIZATION_CODE_WITH_PKCE_WITH_HASH);
-                    prepStmt.setString(2, OAuth2Util.oaepEncrypt(persistenceProcessor.getProcessedAuthzCode(authzCode)));
+                    prepStmt.setString(2, persistenceProcessor.getProcessedAuthzCode(authzCode));
                     prepStmt.setString(13, OAuth2Util.hashAuthzCode(authzCode));
                     prepStmt.setString(14, persistenceProcessor.getProcessedClientId(consumerKey));
-                }else {
+                } else {
                     prepStmt = connection.prepareStatement(SQLQueries.STORE_AUTHORIZATION_CODE_WITH_PKCE);
                     prepStmt.setString(2, persistenceProcessor.getProcessedAuthzCode(authzCode));
                     prepStmt.setString(13, persistenceProcessor.getProcessedClientId(consumerKey));
                 }
                 prepStmt.setString(1, authzCodeDO.getAuthzCodeId());
-
                 prepStmt.setString(3, callbackUrl);
                 prepStmt.setString(4, OAuth2Util.buildScopeString(authzCodeDO.getScope()));
                 prepStmt.setString(5, authzCodeDO.getAuthorizedUser().getUserName());
@@ -213,12 +201,10 @@ public class TokenMgtDAO {
                 prepStmt.setString(11, authzCodeDO.getPkceCodeChallenge());
                 prepStmt.setString(12, authzCodeDO.getPkceCodeChallengeMethod());
 
-
             } else {
-                if (rsaOaepEncryptionEnabled) {
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
                     prepStmt = connection.prepareStatement(SQLQueries.STORE_AUTHORIZATION_CODE_WITH_HASH);
-                    prepStmt.setString(2,
-                            OAuth2Util.oaepEncrypt(persistenceProcessor.getProcessedAuthzCode(authzCode)));
+                    prepStmt.setString(2, persistenceProcessor.getProcessedAuthzCode(authzCode));
                     prepStmt.setString(11, OAuth2Util.hashAuthzCode(authzCode));
                     prepStmt.setString(12, persistenceProcessor.getProcessedClientId(consumerKey));
                 } else {
@@ -298,12 +284,12 @@ public class TokenMgtDAO {
                 .getTokenPartitionedSqlByUserStore(SQLQueries.INSERT_OAUTH2_TOKEN_SCOPE, userStoreDomain);
 
         try {
-            if (rsaOaepEncryptionEnabled) {
+            if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
                 sql = OAuth2Util.getTokenPartitionedSqlByUserStore(SQLQueries.INSERT_OAUTH2_ACCESS_TOKEN_WITH_HASH,
                         userStoreDomain);
                 insertTokenPrepStmt = connection.prepareStatement(sql);
-                insertTokenPrepStmt.setString(1,
-                        OAuth2Util.oaepEncrypt(persistenceProcessor.getProcessedAccessTokenIdentifier(accessToken)));
+                insertTokenPrepStmt.setString(1, persistenceProcessor.
+                        getProcessedAccessTokenIdentifier(accessToken));
                 insertTokenPrepStmt.setString(16, OAuth2Util.hashAccessTokenIdentifier(accessToken));
 
             } else {
@@ -312,9 +298,9 @@ public class TokenMgtDAO {
             }
 
             if (accessTokenDO.getRefreshToken() != null) {
-                if (rsaOaepEncryptionEnabled) {
-                    insertTokenPrepStmt.setString(2, OAuth2Util.oaepEncrypt(
-                            persistenceProcessor.getProcessedRefreshToken(accessTokenDO.getRefreshToken())));
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    insertTokenPrepStmt.setString(2, persistenceProcessor.
+                            getProcessedRefreshToken(accessTokenDO.getRefreshToken()));
                     insertTokenPrepStmt.setString(17, OAuth2Util.hashRefreshToken(accessTokenDO.getRefreshToken()));
                     insertTokenPrepStmt.setString(18, persistenceProcessor.getProcessedClientId(consumerKey));
                 } else {
@@ -324,7 +310,7 @@ public class TokenMgtDAO {
                 }
             } else {
                 insertTokenPrepStmt.setString(2, accessTokenDO.getRefreshToken());
-                insertTokenPrepStmt.setString(17, accessTokenDO.getRefreshToken());
+                insertTokenPrepStmt.setString(17, persistenceProcessor.getProcessedClientId(consumerKey));
             }
 
             insertTokenPrepStmt.setString(3, accessTokenDO.getAuthzUser().getUserName());
@@ -400,7 +386,6 @@ public class TokenMgtDAO {
             IdentityDatabaseUtil.closeStatement(insertTokenPrepStmt);
         }
     }
-
 
     public void storeAccessToken(String accessToken, String consumerKey, AccessTokenDO newAccessTokenDO,
                                  AccessTokenDO existingAccessTokenDO, String userStoreDomain)
@@ -537,46 +522,26 @@ public class TokenMgtDAO {
                 }
                 if (returnToken) {
                     String accessToken = null;
-                    if (rsaOaepEncryptionEnabled) {
-                        String processedAccessTokenIdentifierWithPrefix = resultSet.getString(1);
-                        if (OAuth2Util.isStartWithOaepPrefix(processedAccessTokenIdentifierWithPrefix)) {
-                            accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(
-                                    OAuth2Util.retrieveOaepEncryptedKey(processedAccessTokenIdentifierWithPrefix));
-                        } else {
-                            String decryptedAccessTokenIdentifier = OAuth2Util.decryptWithRSA(resultSet.getString(1));
-                            accessToken = decryptedAccessTokenIdentifier;
-                            updateNewEncryptedToken(connection,decryptedAccessTokenIdentifier,resultSet.getString(1)
-                                    ,consumerKey);
-
-                            /*prepStmt = connection.prepareStatement(SQLQueries.UPDATE_ACCESS_TOKEN);
-                            prepStmt.setString(1, OAuth2Util.oaepEncrypt(
-                                    persistenceProcessor.getProcessedAccessTokenIdentifier(decryptedAccessTokenIdentifier)));
-                            prepStmt.setString(2, OAuth2Util.hashAccessTokenIdentifier(decryptedAccessTokenIdentifier));
-                            prepStmt.setString(3, resultSet.getString(1));
-                            prepStmt.setString(3, consumerKey);
-                            prepStmt.executeUpdate();*/
+                    if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                        accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
+                        if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
+                            updateNewEncryptedToken(connection, accessToken, resultSet.getString(1));
                         }
-
                     } else {
                         accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
                     }
                     String refreshToken = null;
                     if (resultSet.getString(2) != null) {
-                        if (rsaOaepEncryptionEnabled) {
-                            String processedRefreshTokenWithPrefix = resultSet.getString(2);
-                            if (OAuth2Util.isStartWithOaepPrefix(processedRefreshTokenWithPrefix)) {
-                                refreshToken = persistenceProcessor.getPreprocessedRefreshToken(
-                                        OAuth2Util.retrieveOaepEncryptedKey(processedRefreshTokenWithPrefix));
-                            } else {
-                                String decryptedrefreshToken = OAuth2Util.decryptWithRSA(resultSet.getString(2));
-                                refreshToken = decryptedrefreshToken;
-                                updateNewEncryptedRefreshToken(connection,decryptedrefreshToken,resultSet.getString(2),consumerKey);
+                        if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                            refreshToken = persistenceProcessor.getPreprocessedRefreshToken(resultSet.getString(2));
+                            if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(2))) {
+                                updateNewEncryptedRefreshToken(connection, refreshToken, resultSet.getString(2));
                             }
-
                         } else {
                             refreshToken = persistenceProcessor.getPreprocessedRefreshToken(resultSet.getString(2));
                         }
                     }
+                    connection.commit();
                     long issuedTime = resultSet.getTimestamp(3, Calendar.getInstance(TimeZone.getTimeZone(UTC)))
                             .getTime();
                     long refreshTokenIssuedTime = resultSet.getTimestamp(4, Calendar.getInstance(TimeZone.getTimeZone
@@ -617,34 +582,7 @@ public class TokenMgtDAO {
         }
     }
 
-    private void updateNewEncryptedRefreshToken(Connection connection,String decryptedrefreshToken,String
-            oldEncryptedToken, String consumerKey)
-            throws SQLException, IdentityOAuth2Exception {
-        PreparedStatement prepStmt = null;
-        prepStmt = connection.prepareStatement(SQLQueries.UPDATE_REFRESH_TOKEN);
-        prepStmt.setString(1, OAuth2Util.oaepEncrypt(
-                persistenceProcessor.getProcessedRefreshToken(decryptedrefreshToken)));
-        prepStmt.setString(2, OAuth2Util.hashRefreshToken(decryptedrefreshToken));
-        prepStmt.setString(3, oldEncryptedToken);
-        prepStmt.setString(4, consumerKey);
-        prepStmt.executeUpdate();
-        connection.commit();
 
-    }
-    private void updateNewEncryptedToken(Connection connection,String decryptedAccessTokenIdentifier,String
-            oldEncryptedToken, String consumerKey)
-            throws SQLException, IdentityOAuth2Exception {
-        PreparedStatement prepStmt = null;
-        prepStmt = connection.prepareStatement(SQLQueries.UPDATE_ACCESS_TOKEN);
-        prepStmt.setString(1, OAuth2Util.oaepEncrypt(
-                persistenceProcessor.getProcessedAccessTokenIdentifier(decryptedAccessTokenIdentifier)));
-        prepStmt.setString(2, OAuth2Util.hashAccessTokenIdentifier(decryptedAccessTokenIdentifier));
-        prepStmt.setString(3, oldEncryptedToken);
-        prepStmt.setString(3, consumerKey);
-        prepStmt.executeUpdate();
-        connection.commit();
-
-    }
     public Set<AccessTokenDO> retrieveAccessTokens(String consumerKey, AuthenticatedUser userName,
                                                    String userStoreDomain, boolean includeExpired)
             throws IdentityOAuth2Exception {
@@ -685,29 +623,26 @@ public class TokenMgtDAO {
 
             while (resultSet.next()) {
                 String accessToken = null;
-                if(rsaOaepEncryptionEnabled){
-                    String processedAccessTokenIdentifierWithPrefix = resultSet.getString(1);
-                    if(OAuth2Util.isStartWithOaepPrefix(processedAccessTokenIdentifierWithPrefix)){
-                        String processedAccessTokenIdentifierWithoutPrefix = processedAccessTokenIdentifierWithPrefix.substring(4);
-                        accessToken = persistenceProcessor.
-                                getPreprocessedAccessTokenIdentifier(processedAccessTokenIdentifierWithoutPrefix);
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    accessToken = persistenceProcessor.
+                            getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
+                    if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
+                        updateNewEncryptedToken(connection, accessToken, resultSet.getString(1));
                     }
-
-                }else {
+                } else {
                     accessToken = persistenceProcessor.
                             getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
                 }
                 if (accessTokenDOMap.get(accessToken) == null) {
                     String refreshToken = null;
-                    if(rsaOaepEncryptionEnabled){
-                        String processedRefreshTokenWithPrefix = resultSet.getString(2);
-                        if(OAuth2Util.isStartWithOaepPrefix(processedRefreshTokenWithPrefix)){
-                            String processedRefreshTokenIdentifierWithoutPrefix = processedRefreshTokenWithPrefix.substring(4);
-                            refreshToken = persistenceProcessor.
-                                    getPreprocessedRefreshToken(processedRefreshTokenIdentifierWithoutPrefix);
+                    if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                        refreshToken = persistenceProcessor.
+                                getPreprocessedRefreshToken(resultSet.getString(2));
+                        if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(2))) {
+                            updateNewEncryptedRefreshToken(connection, refreshToken, resultSet.getString(2));
                         }
 
-                    }else {
+                    } else {
                         refreshToken = persistenceProcessor.
                                 getPreprocessedRefreshToken(resultSet.getString(2));
                     }
@@ -778,19 +713,15 @@ public class TokenMgtDAO {
             long validityPeriod = 0;
             int tenantId;
             if (OAuth2ServiceComponentHolder.isPkceEnabled()) {
-                if(rsaOaepEncryptionEnabled) {
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
                     prepStmt = connection.prepareStatement(SQLQueries.VALIDATE_AUTHZ_CODE_WITH_PKCE_WITH_HASH);
-                }else {
-                    prepStmt = connection.prepareStatement(SQLQueries.VALIDATE_AUTHZ_CODE_WITH_PKCE);
-                }
-                prepStmt.setString(1, persistenceProcessor.getProcessedClientId(consumerKey));
-                if (rsaOaepEncryptionEnabled) {
-                    TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-                    String hashedAuthzCode = tokenPersistenceProcessor.getProcessedAuthzCode(authorizationKey);
-                    prepStmt.setString(2, hashedAuthzCode);
+                    prepStmt.setString(2, OAuth2Util.hashAuthzCode(authorizationKey));
                 } else {
+                    prepStmt = connection.prepareStatement(SQLQueries.VALIDATE_AUTHZ_CODE_WITH_PKCE);
                     prepStmt.setString(2, persistenceProcessor.getProcessedAuthzCode(authorizationKey));
                 }
+                prepStmt.setString(1, persistenceProcessor.getProcessedClientId(consumerKey));
+
                 resultSet = prepStmt.executeQuery();
 
                 if (resultSet.next()) {
@@ -821,25 +752,55 @@ public class TokenMgtDAO {
                         revokeToken(tokenId, authorizedUser);
                     }
                 } else {
-                    // this means we were not able to find the authorization code in the database table.
-                    return null;
+                    if (isRsaEncryptedAuthorizationCodeAvailable(connection, authorizationKey)) {
+                        prepStmt = connection.prepareStatement(SQLQueries.VALIDATE_AUTHZ_CODE_WITH_PKCE);
+                        prepStmt.setString(1, persistenceProcessor.getProcessedClientId(consumerKey));
+                        prepStmt.setString(2, OAuth2Util.encryptWithRSA(authorizationKey));
+                        resultSet = prepStmt.executeQuery();
+                        if (resultSet.next()) {
+                            codeState = resultSet.getString(8);
+                            authorizedUser = resultSet.getString(1);
+                            userstoreDomain = resultSet.getString(2);
+                            tenantId = resultSet.getInt(3);
+                            tenantDomain = OAuth2Util.getTenantDomain(tenantId);
+                            scopeString = resultSet.getString(4);
+                            callbackUrl = resultSet.getString(5);
+                            issuedTime = resultSet.getTimestamp(6, Calendar.getInstance(TimeZone.getTimeZone(UTC)));
+                            validityPeriod = resultSet.getLong(7);
+                            codeId = resultSet.getString(11);
+                            subjectIdentifier = resultSet.getString(12);
+                            pkceCodeChallenge = resultSet.getString(13);
+                            pkceCodeChallengeMethod = resultSet.getString(14);
+                            user = new AuthenticatedUser();
+                            user.setUserName(authorizedUser);
+                            user.setTenantDomain(tenantDomain);
+                            user.setUserStoreDomain(userstoreDomain);
+                            user.setAuthenticatedSubjectIdentifier(subjectIdentifier);
+                            authorizedUser = UserCoreUtil.addDomainToName(authorizedUser, userstoreDomain);
+                            authorizedUser = UserCoreUtil.addTenantDomainToEntry(authorizedUser, tenantDomain);
+
+                            if (!OAuthConstants.AuthorizationCodeState.ACTIVE.equals(codeState)) {
+                                //revoking access token issued for authorization code as per RFC 6749 Section 4.1.2
+                                String tokenId = resultSet.getString(9);
+                                revokeToken(tokenId, authorizedUser);
+                            }
+                        }
+                        updateNewEncryptedAuthzCode(connection, authorizationKey, OAuth2Util.encryptWithRSA(authorizationKey));
+                    } else {
+                        return null;
+                    }
                 }
 
             } else {
-                if(rsaOaepEncryptionEnabled) {
-                    prepStmt = connection.prepareStatement(SQLQueries.VALIDATE_AUTHZ_CODE_WITH_HASH);
-                }else {
 
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    prepStmt = connection.prepareStatement(SQLQueries.VALIDATE_AUTHZ_CODE_WITH_HASH);
+                    prepStmt.setString(2, OAuth2Util.hashAuthzCode(authorizationKey));
+                } else {
                     prepStmt = connection.prepareStatement(SQLQueries.VALIDATE_AUTHZ_CODE);
-                }
-                prepStmt.setString(1, persistenceProcessor.getProcessedClientId(consumerKey));
-                if (rsaOaepEncryptionEnabled) {
-                    TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-                    String hashedAuthzCode = tokenPersistenceProcessor.getProcessedAuthzCode(authorizationKey);
-                    prepStmt.setString(2, hashedAuthzCode);
-                }else {
                     prepStmt.setString(2, persistenceProcessor.getProcessedAuthzCode(authorizationKey));
                 }
+                prepStmt.setString(1, persistenceProcessor.getProcessedClientId(consumerKey));
                 resultSet = prepStmt.executeQuery();
 
                 if (resultSet.next()) {
@@ -869,8 +830,44 @@ public class TokenMgtDAO {
                         revokeToken(tokenId, authorizedUser);
                     }
                 } else {
-                    // this means we were not able to find the authorization code in the database table.
-                    return null;
+                    if(isRsaEncryptedAuthorizationCodeAvailable(connection,authorizationKey)){
+                        prepStmt = connection.prepareStatement(SQLQueries.VALIDATE_AUTHZ_CODE);
+                        prepStmt.setString(1, persistenceProcessor.getProcessedClientId(consumerKey));
+                        prepStmt.setString(2, OAuth2Util.encryptWithRSA(authorizationKey));
+                        resultSet = prepStmt.executeQuery();
+                        if (resultSet.next()) {
+                            codeState = resultSet.getString(8);
+                            authorizedUser = resultSet.getString(1);
+                            userstoreDomain = resultSet.getString(2);
+                            tenantId = resultSet.getInt(3);
+                            tenantDomain = OAuth2Util.getTenantDomain(tenantId);
+                            scopeString = resultSet.getString(4);
+                            callbackUrl = resultSet.getString(5);
+                            issuedTime = resultSet.getTimestamp(6, Calendar.getInstance(TimeZone.getTimeZone(UTC)));
+                            validityPeriod = resultSet.getLong(7);
+                            codeId = resultSet.getString(11);
+                            subjectIdentifier = resultSet.getString(12);
+
+                            user = new AuthenticatedUser();
+                            user.setUserName(authorizedUser);
+                            user.setTenantDomain(tenantDomain);
+                            user.setUserStoreDomain(userstoreDomain);
+                            user.setAuthenticatedSubjectIdentifier(subjectIdentifier);
+                            authorizedUser = UserCoreUtil.addDomainToName(authorizedUser, userstoreDomain);
+                            authorizedUser = UserCoreUtil.addTenantDomainToEntry(authorizedUser, tenantDomain);
+
+                            if (!OAuthConstants.AuthorizationCodeState.ACTIVE.equals(codeState)) {
+                                //revoking access token issued for authorization code as per RFC 6749 Section 4.1.2
+                                String tokenId = resultSet.getString(9);
+                                revokeToken(tokenId, authorizedUser);
+                            }
+                        }
+                        updateNewEncryptedAuthzCode(connection,authorizationKey,OAuth2Util.encryptWithRSA(authorizationKey));
+                    }
+                    else {
+                        // this means we were not able to find the authorization code in the database table.
+                        return null;
+                    }
                 }
 
             }
@@ -903,14 +900,17 @@ public class TokenMgtDAO {
 
         try {
             prepStmt = connection.prepareStatement(SQLQueries.DEACTIVATE_AUTHZ_CODE_AND_INSERT_CURRENT_TOKEN);
+            if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    prepStmt = connection.prepareStatement(SQLQueries
+                            .DEACTIVATE_AUTHZ_CODE_AND_INSERT_CURRENT_TOKEN_WITH_HASH);
+            }
             for (AuthzCodeDO authzCodeDO : authzCodeDOs) {
                 prepStmt.setString(1, authzCodeDO.getOauthTokenId());
-                if (rsaOaepEncryptionEnabled) {
-                    TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-                    String hashedAuthzCode = tokenPersistenceProcessor.getProcessedAuthzCode(authzCodeDO.getAuthorizationCode());
-                    prepStmt.setString(2, hashedAuthzCode);
-                }else {
-                    prepStmt.setString(2, persistenceProcessor.getProcessedAuthzCode(authzCodeDO.getAuthorizationCode()));
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    prepStmt.setString(2, OAuth2Util.hashAuthzCode(authzCodeDO.getAuthorizationCode()));
+                } else {
+                    prepStmt.setString(2,
+                            persistenceProcessor.getProcessedAuthzCode(authzCodeDO.getAuthorizationCode()));
                 }
                 prepStmt.addBatch();
             }
@@ -930,16 +930,31 @@ public class TokenMgtDAO {
         try {
             String sqlQuery = SQLQueries.UPDATE_AUTHORIZATION_CODE_STATE.replace(IDN_OAUTH2_AUTHORIZATION_CODE,
                     authCodeStoreTable);
-            prepStmt = connection.prepareStatement(sqlQuery);
-            prepStmt.setString(1, newState);
-            if (rsaOaepEncryptionEnabled) {
-                TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-                String hashedAuthzCode = tokenPersistenceProcessor.getProcessedAuthzCode(authzCode);
-                prepStmt.setString(2, hashedAuthzCode);
-            }else {
+
+            if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                sqlQuery = SQLQueries.UPDATE_AUTHORIZATION_CODE_STATE_WITH_HASH
+                        .replace(IDN_OAUTH2_AUTHORIZATION_CODE, authCodeStoreTable);
+                prepStmt = connection.prepareStatement(sqlQuery);
+                prepStmt.setString(2, OAuth2Util.hashAuthzCode(authzCode));
+            } else {
+                prepStmt = connection.prepareStatement(sqlQuery);
                 prepStmt.setString(2, persistenceProcessor.getProcessedAuthzCode(authzCode));
             }
-            prepStmt.execute();
+            prepStmt.setString(1, newState);
+            int count = prepStmt.executeUpdate();
+            if (count == 0) {
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled() && isRsaEncryptedAuthorizationCodeAvailable(connection,
+                        authzCode)) {
+                    PreparedStatement preparedStatement = null;
+                    preparedStatement = connection.prepareStatement(SQLQueries.UPDATE_AUTHORIZATION_CODE_STATE
+                            .replace(IDN_OAUTH2_AUTHORIZATION_CODE, authCodeStoreTable));
+                    preparedStatement.setString(1, newState);
+                    preparedStatement.setString(2, OAuth2Util.encryptWithRSA(authzCode));
+                    preparedStatement.executeUpdate();
+                    updateNewEncryptedAuthzCode(connection, authzCode, OAuth2Util.encryptWithRSA(authzCode));
+
+                }
+            }
             connection.commit();
         } catch (SQLException e) {
             IdentityDatabaseUtil.rollBack(connection);
@@ -967,21 +982,26 @@ public class TokenMgtDAO {
             IdentityOAuth2Exception {
         PreparedStatement prepStmt = null;
         try {
-            if(rsaOaepEncryptionEnabled){
-                prepStmt = connection.prepareStatement(SQLQueries.DEACTIVATE_AUTHZ_CODE_AND_INSERT_CURRENT_TOKEN_WITH_HASH);
-            }else {
+            if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                prepStmt = connection
+                        .prepareStatement(SQLQueries.DEACTIVATE_AUTHZ_CODE_AND_INSERT_CURRENT_TOKEN_WITH_HASH);
+                prepStmt.setString(2, OAuth2Util.hashAuthzCode(authzCodeDO.getAuthorizationCode()));
+            } else {
                 prepStmt = connection.prepareStatement(SQLQueries.DEACTIVATE_AUTHZ_CODE_AND_INSERT_CURRENT_TOKEN);
-            }
-            prepStmt.setString(1, authzCodeDO.getOauthTokenId());
-            if(rsaOaepEncryptionEnabled){
-                TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-                String hashedAuthzCOde = tokenPersistenceProcessor.getProcessedAuthzCode(authzCodeDO
-                        .getAuthorizationCode());
-                prepStmt.setString(2, hashedAuthzCOde);
-            }else {
                 prepStmt.setString(2, persistenceProcessor.getProcessedAuthzCode(authzCodeDO.getAuthorizationCode()));
             }
-            prepStmt.executeUpdate();
+            prepStmt.setString(1, authzCodeDO.getOauthTokenId());
+            int count = prepStmt.executeUpdate();
+            if(count == 0){
+                if(OAuth2Util.checkRsaOaepEncryptionEnabled() && isRsaEncryptedAuthorizationCodeAvailable(connection,authzCodeDO.getAuthorizationCode())){
+                    PreparedStatement preparedStatement = null;
+                    preparedStatement = connection.prepareStatement(SQLQueries.DEACTIVATE_AUTHZ_CODE_AND_INSERT_CURRENT_TOKEN);
+                    preparedStatement.setString(1, authzCodeDO.getOauthTokenId());
+                    preparedStatement.setString(2, OAuth2Util.encryptWithRSA(authzCodeDO.getAuthorizationCode()));
+                    preparedStatement.executeUpdate();
+                    updateNewEncryptedAuthzCode(connection,authzCodeDO.getAuthorizationCode(),OAuth2Util.encryptWithRSA(authzCodeDO.getAuthorizationCode()));
+                }
+            }
         } catch (SQLException e) {
             throw new IdentityOAuth2Exception("Error when deactivating authorization code", e);
         } finally {
@@ -996,16 +1016,14 @@ public class TokenMgtDAO {
         Connection connection = IdentityDatabaseUtil.getDBConnection();
         PreparedStatement prepStmt = null;
         ResultSet resultSet = null;
-        String sql;
+        String sqlWithHash = null,sql = null;
+        boolean isResultsetAvaiable = false;
 
         try {
             if (connection.getMetaData().getDriverName().contains("MySQL")
                     || connection.getMetaData().getDriverName().contains("H2")) {
-                if(rsaOaepEncryptionEnabled){
-                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_WITH_HASH_MYSQL;
-                }else {
-                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_MYSQL;
-                }
+                sqlWithHash = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_WITH_HASH_MYSQL;
+                sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_MYSQL;
             } else if (connection.getMetaData().getDatabaseProductName().contains("DB2")) {
                 sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_DB2SQL;
             } else if (connection.getMetaData().getDriverName().contains("MS SQL")
@@ -1019,46 +1037,43 @@ public class TokenMgtDAO {
                 sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_ORACLE;
             }
 
+            sqlWithHash = OAuth2Util.getTokenPartitionedSqlByToken(sqlWithHash, refreshToken);
             sql = OAuth2Util.getTokenPartitionedSqlByToken(sql, refreshToken);
 
             if (refreshToken == null) {
-                if(rsaOaepEncryptionEnabled){
-                    sql = sql.replace("REFRESH_TOKEN_HASH = ?", "REFRESH_TOKEN_HASH IS NULL");
-                }else {
-                    sql = sql.replace("REFRESH_TOKEN = ?", "REFRESH_TOKEN IS NULL");
-                }
+                sqlWithHash = sql.replace("REFRESH_TOKEN_HASH = ?", "REFRESH_TOKEN_HASH IS NULL");
+                sql = sql.replace("REFRESH_TOKEN = ?", "REFRESH_TOKEN IS NULL");
             }
 
-            prepStmt = connection.prepareStatement(sql);
 
-            prepStmt.setString(1, persistenceProcessor.getProcessedClientId(consumerKey));
             if (refreshToken != null) {
-                if(rsaOaepEncryptionEnabled){
-                    TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-                    String hashedRefreshToken = tokenPersistenceProcessor.getProcessedRefreshToken(refreshToken);
-                    prepStmt.setString(2, hashedRefreshToken);
-                }else {
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    prepStmt = connection.prepareStatement(sqlWithHash);
+                    prepStmt.setString(2, OAuth2Util.hashRefreshToken(refreshToken));
+
+                } else {
+                    prepStmt = connection.prepareStatement(sql);
                     prepStmt.setString(2, persistenceProcessor.getProcessedRefreshToken(refreshToken));
                 }
             }
-
+            prepStmt.setString(1, persistenceProcessor.getProcessedClientId(consumerKey));
             resultSet = prepStmt.executeQuery();
 
             int iterateId = 0;
             List<String> scopes = new ArrayList<>();
             while (resultSet.next()) {
-
+                isResultsetAvaiable = true;
                 if (iterateId == 0) {
-                    if(rsaOaepEncryptionEnabled){
-                        String processedAccessTokenIdentifierWithPrefix = resultSet.getString(1);
-                        if(OAuth2Util.isStartWithOaepPrefix(processedAccessTokenIdentifierWithPrefix)){
-                            String processedAccessTokenIdentifierWithoutPrefix = processedAccessTokenIdentifierWithPrefix.substring(4);
-                            validationDataDO.setAccessToken(persistenceProcessor.getPreprocessedAccessTokenIdentifier(
-                                    processedAccessTokenIdentifierWithoutPrefix));
+                    if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                        String accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(
+                                resultSet.getString(1));
+                        validationDataDO.setAccessToken(accessToken);
+                        if(!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))){
+                            updateNewEncryptedToken(connection,accessToken,resultSet.getString(1));
                         }
-
-                    }else {
-                        validationDataDO.setAccessToken(persistenceProcessor.getPreprocessedAccessTokenIdentifier(resultSet.getString(1)));
+                    } else {
+                        validationDataDO.setAccessToken(
+                                persistenceProcessor.getPreprocessedAccessTokenIdentifier(resultSet.getString(1)));
                     }
                     String userName = resultSet.getString(2);
                     int tenantId = resultSet.getInt(3);
@@ -1086,6 +1101,50 @@ public class TokenMgtDAO {
 
                 iterateId++;
             }
+            if(!isResultsetAvaiable){
+                if(OAuth2Util.checkRsaOaepEncryptionEnabled() && isRsaEncryptedRefreshTokenAvailable(connection,refreshToken)){
+                    PreparedStatement preparedStatement = null;
+                    ResultSet resultSet1;
+                    preparedStatement = connection.prepareStatement(sql);
+                    preparedStatement.setString(1, persistenceProcessor.getProcessedClientId(consumerKey));
+                    preparedStatement.setString(2, OAuth2Util.encryptWithRSA(refreshToken));
+                    resultSet1 = preparedStatement.executeQuery();
+                    while (resultSet1.next()) {
+                        if (iterateId == 0) {
+                            String accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(
+                                    resultSet1.getString(1));
+                            validationDataDO.setAccessToken(
+                                    accessToken);
+                            if(!OAuth2Util.isStartWithOaepPrefix(resultSet1.getString(1))){
+                                updateNewEncryptedToken(connection,accessToken,resultSet1.getString(1));
+                            }
+                            String userName = resultSet1.getString(2);
+                            int tenantId = resultSet1.getInt(3);
+                            String userDomain = resultSet1.getString(4);
+                            String tenantDomain = OAuth2Util.getTenantDomain(tenantId);
+
+                            validationDataDO.setScope(OAuth2Util.buildScopeArray(resultSet1.getString(5)));
+                            validationDataDO.setRefreshTokenState(resultSet1.getString(6));
+                            validationDataDO.setIssuedTime(
+                                    resultSet1.getTimestamp(7, Calendar.getInstance(TimeZone.getTimeZone(UTC))));
+                            validationDataDO.setValidityPeriodInMillis(resultSet1.getLong(8));
+                            validationDataDO.setTokenId(resultSet1.getString(9));
+                            validationDataDO.setGrantType(resultSet1.getString(10));
+                            String subjectIdentifier = resultSet1.getString(11);
+                            AuthenticatedUser user = new AuthenticatedUser();
+                            user.setUserName(userName);
+                            user.setUserStoreDomain(userDomain);
+                            user.setTenantDomain(tenantDomain);
+                            user.setAuthenticatedSubjectIdentifier(subjectIdentifier);
+                            validationDataDO.setAuthorizedUser(user);
+                        }else {
+                            scopes.add(resultSet1.getString(5));
+                        }
+                        iterateId++;
+                    }
+                    updateNewEncryptedRefreshToken(connection,refreshToken,OAuth2Util.encryptWithRSA(refreshToken));
+                }
+            }
 
             if (scopes.size() > 0 && validationDataDO != null) {
                 validationDataDO.setScope((String[]) ArrayUtils.addAll(validationDataDO.getScope(),
@@ -1111,38 +1170,34 @@ public class TokenMgtDAO {
                     " with flag includeExpired: " + includeExpired);
         }
 
-        log.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
-
         AccessTokenDO dataDO = null;
         Connection connection = IdentityDatabaseUtil.getDBConnection();
         PreparedStatement prepStmt = null;
         ResultSet resultSet = null;
+        boolean isResultsetAvaiable = false;
 
         try {
             String sql;
 
             if (includeExpired) {
-                if(rsaOaepEncryptionEnabled) {
+                if(OAuth2Util.checkRsaOaepEncryptionEnabled()) {
                     sql = SQLQueries.RETRIEVE_ACTIVE_EXPIRED_ACCESS_TOKEN_WITH_HASH;
                 }else {
                     sql = SQLQueries.RETRIEVE_ACTIVE_EXPIRED_ACCESS_TOKEN;
                 }
             } else {
-                if(rsaOaepEncryptionEnabled){
+                if(OAuth2Util.checkRsaOaepEncryptionEnabled()){
                     sql = SQLQueries.RETRIEVE_ACTIVE_ACCESS_TOKEN_WITH_HASH;
                 }else {
                     sql = SQLQueries.RETRIEVE_ACTIVE_ACCESS_TOKEN;
                 }
             }
 
-
             sql = OAuth2Util.getTokenPartitionedSqlByToken(sql, accessTokenIdentifier);
 
             prepStmt = connection.prepareStatement(sql);
-            if(rsaOaepEncryptionEnabled){
-                TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-                String hashedAccessToken = tokenPersistenceProcessor.getProcessedAccessTokenIdentifier(accessTokenIdentifier);
-                prepStmt.setString(1, hashedAccessToken);
+            if(OAuth2Util.checkRsaOaepEncryptionEnabled()){
+                prepStmt.setString(1, OAuth2Util.hashAccessTokenIdentifier(accessTokenIdentifier));
             }else {
                 prepStmt.setString(1, persistenceProcessor.getProcessedAccessTokenIdentifier(accessTokenIdentifier));
             }
@@ -1151,7 +1206,7 @@ public class TokenMgtDAO {
             int iterateId = 0;
             List<String> scopes = new ArrayList<>();
             while (resultSet.next()) {
-
+                isResultsetAvaiable = true;
                 if (iterateId == 0) {
 
                     String consumerKey = persistenceProcessor.getPreprocessedClientId(resultSet.getString(1));
@@ -1191,11 +1246,68 @@ public class TokenMgtDAO {
 
                 iterateId++;
             }
+            if(!isResultsetAvaiable){
+                if(OAuth2Util.checkRsaOaepEncryptionEnabled() && isRsaEncryptedAccessTokenAvailable(connection,
+                        accessTokenIdentifier)){
+                    PreparedStatement preparedStatement = null;
+                    ResultSet resultSet1;
+                    if (includeExpired) {
+                            sql = SQLQueries.RETRIEVE_ACTIVE_EXPIRED_ACCESS_TOKEN;
+                    } else {
+                            sql = SQLQueries.RETRIEVE_ACTIVE_ACCESS_TOKEN;
+                    }
+                    preparedStatement = connection.prepareStatement(sql);
+                    preparedStatement.setString(1, OAuth2Util.encryptWithRSA(accessTokenIdentifier));
+                    resultSet1 = preparedStatement.executeQuery();
+                    while (resultSet1.next()) {
+                        if (iterateId == 0) {
+
+                            String consumerKey = persistenceProcessor.getPreprocessedClientId(resultSet1.getString(1));
+                            String authorizedUser = resultSet1.getString(2);
+                            int tenantId = resultSet1.getInt(3);
+                            String tenantDomain = OAuth2Util.getTenantDomain(tenantId);
+                            String userDomain = resultSet1.getString(4);
+                            String[] scope = OAuth2Util.buildScopeArray(resultSet1.getString(5));
+                            Timestamp issuedTime = resultSet1.getTimestamp(6, Calendar.getInstance(TimeZone.getTimeZone(UTC)));
+                            Timestamp refreshTokenIssuedTime = resultSet1.getTimestamp(7,
+                                    Calendar.getInstance(TimeZone.getTimeZone(UTC)));
+                            long validityPeriodInMillis = resultSet1.getLong(8);
+                            long refreshTokenValidityPeriodMillis = resultSet1.getLong(9);
+                            String tokenType = resultSet1.getString(10);
+                            String refreshToken = resultSet1.getString(11);
+                            String tokenId = resultSet1.getString(12);
+                            String grantType = resultSet1.getString(13);
+                            String subjectIdentifier = resultSet1.getString(14);
+
+                            AuthenticatedUser user = new AuthenticatedUser();
+                            user.setUserName(authorizedUser);
+                            user.setUserStoreDomain(userDomain);
+                            user.setTenantDomain(tenantDomain);
+                            user.setAuthenticatedSubjectIdentifier(subjectIdentifier);
+
+                            dataDO = new AccessTokenDO(consumerKey, user, scope, issuedTime, refreshTokenIssuedTime,
+                                    validityPeriodInMillis, refreshTokenValidityPeriodMillis, tokenType);
+                            dataDO.setAccessToken(accessTokenIdentifier);
+                            dataDO.setRefreshToken(refreshToken);
+                            dataDO.setTokenId(tokenId);
+                            dataDO.setGrantType(grantType);
+                            dataDO.setTenantID(tenantId);
+
+                        } else {
+                            scopes.add(resultSet1.getString(5));
+                        }
+
+                        iterateId++;
+                    }
+                    updateNewEncryptedToken(connection,accessTokenIdentifier,OAuth2Util.encryptWithRSA(accessTokenIdentifier));
+                }
+            }
 
             if (scopes.size() > 0 && dataDO != null) {
                 dataDO.setScope((String[]) ArrayUtils.addAll(dataDO.getScope(),
                         scopes.toArray(new String[scopes.size()])));
             }
+            connection.commit();
 
         } catch (SQLException e) {
             throw new IdentityOAuth2Exception("Error when retrieving Access Token" + e);
@@ -1267,7 +1379,7 @@ public class TokenMgtDAO {
             try {
                 connection.setAutoCommit(false);
                 String sqlQuery;
-                if (rsaOaepEncryptionEnabled) {
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
                     sqlQuery = SQLQueries.REVOKE_ACCESS_TOKEN_WITH_HASH.replace(IDN_OAUTH2_ACCESS_TOKEN, accessTokenStoreTable);
                 } else {
                     sqlQuery = SQLQueries.REVOKE_ACCESS_TOKEN.replace(IDN_OAUTH2_ACCESS_TOKEN, accessTokenStoreTable);
@@ -1276,10 +1388,8 @@ public class TokenMgtDAO {
                 for (String token : tokens) {
                     ps.setString(1, OAuthConstants.TokenStates.TOKEN_STATE_REVOKED);
                     ps.setString(2, UUID.randomUUID().toString());
-                    if(rsaOaepEncryptionEnabled){
-                        TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-                        String hashedAccessToken = tokenPersistenceProcessor.getProcessedAccessTokenIdentifier(token);
-                        ps.setString(3, hashedAccessToken);
+                    if(OAuth2Util.checkRsaOaepEncryptionEnabled()){
+                        ps.setString(3, OAuth2Util.hashAccessTokenIdentifier(token));
                     }else {
                         ps.setString(3, persistenceProcessor.getProcessedAccessTokenIdentifier(token));
                     }
@@ -1298,7 +1408,7 @@ public class TokenMgtDAO {
             try {
                 connection.setAutoCommit(true);
                 String sqlQuery;
-                if (rsaOaepEncryptionEnabled) {
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
                     sqlQuery = SQLQueries.REVOKE_ACCESS_TOKEN_WITH_HASH.replace(IDN_OAUTH2_ACCESS_TOKEN, accessTokenStoreTable);
                 }else {
                     sqlQuery = SQLQueries.REVOKE_ACCESS_TOKEN.replace(IDN_OAUTH2_ACCESS_TOKEN, accessTokenStoreTable);
@@ -1306,14 +1416,24 @@ public class TokenMgtDAO {
                 ps = connection.prepareStatement(sqlQuery);
                 ps.setString(1, OAuthConstants.TokenStates.TOKEN_STATE_REVOKED);
                 ps.setString(2, UUID.randomUUID().toString());
-                if(rsaOaepEncryptionEnabled){
-                    TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-                    String hashedAccessToken = tokenPersistenceProcessor.getProcessedAccessTokenIdentifier(tokens[0]);
-                    ps.setString(3, hashedAccessToken);
-                }else {
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    ps.setString(3, OAuth2Util.hashAccessTokenIdentifier(tokens[0]));
+                } else {
                     ps.setString(3, persistenceProcessor.getProcessedAccessTokenIdentifier(tokens[0]));
                 }
-                ps.executeUpdate();
+                int count = ps.executeUpdate();
+                if(count == 0){
+                    if(OAuth2Util.checkRsaOaepEncryptionEnabled() && isRsaEncryptedAccessTokenAvailable
+                            (connection,tokens[0])){
+                        PreparedStatement preparedStatement = null;
+                        preparedStatement = connection.prepareStatement(SQLQueries.REVOKE_ACCESS_TOKEN.replace(IDN_OAUTH2_ACCESS_TOKEN, accessTokenStoreTable));
+                        preparedStatement.setString(1, OAuthConstants.TokenStates.TOKEN_STATE_REVOKED);
+                        preparedStatement.setString(2, UUID.randomUUID().toString());
+                        preparedStatement.setString(3, OAuth2Util.encryptWithRSA(tokens[0]));
+                        preparedStatement.executeUpdate();
+                        updateNewEncryptedToken(connection,tokens[0],OAuth2Util.encryptWithRSA(tokens[0]));
+                    }
+                }
             } catch (SQLException e) {
                 //IdentityDatabaseUtil.rollBack(connection);
                 throw new IdentityOAuth2Exception("Error occurred while revoking Access Token : " +
@@ -1333,7 +1453,7 @@ public class TokenMgtDAO {
 
             for (String token : tokens) {
                 String sqlQuery;
-                if (rsaOaepEncryptionEnabled) {
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
                     sqlQuery = OAuth2Util.getTokenPartitionedSqlByToken(SQLQueries.REVOKE_ACCESS_TOKEN_WITH_HASH, token);
                 }else {
                     sqlQuery = OAuth2Util.getTokenPartitionedSqlByToken(SQLQueries.REVOKE_ACCESS_TOKEN, token);
@@ -1341,14 +1461,24 @@ public class TokenMgtDAO {
                 ps = connection.prepareStatement(sqlQuery);
                 ps.setString(1, OAuthConstants.TokenStates.TOKEN_STATE_REVOKED);
                 ps.setString(2, UUID.randomUUID().toString());
-                if(rsaOaepEncryptionEnabled){
-                    TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-                    String hashedAccessToken = tokenPersistenceProcessor.getProcessedAccessTokenIdentifier(token);
-                    ps.setString(3, hashedAccessToken);
+                if(OAuth2Util.checkRsaOaepEncryptionEnabled()){
+                    ps.setString(3, OAuth2Util.hashAccessTokenIdentifier(token));
                 }else {
                     ps.setString(3, persistenceProcessor.getProcessedAccessTokenIdentifier(token));
                 }
                 int count = ps.executeUpdate();
+                if(count == 0){
+                    if(OAuth2Util.checkRsaOaepEncryptionEnabled() && isRsaEncryptedAccessTokenAvailable
+                            (connection,token)){
+                        PreparedStatement preparedStatement = null;
+                        preparedStatement = connection.prepareStatement(OAuth2Util.getTokenPartitionedSqlByToken(SQLQueries.REVOKE_ACCESS_TOKEN, token));
+                        preparedStatement.setString(1, OAuthConstants.TokenStates.TOKEN_STATE_REVOKED);
+                        preparedStatement.setString(2, UUID.randomUUID().toString());
+                        preparedStatement.setString(3, OAuth2Util.encryptWithRSA(token));
+                        preparedStatement.executeUpdate();
+                        updateNewEncryptedToken(connection,token,OAuth2Util.encryptWithRSA(token));
+                    }
+                }
                 if (log.isDebugEnabled()) {
                     log.debug("Number of rows being updated : " + count);
                 }
@@ -1425,14 +1555,13 @@ public class TokenMgtDAO {
             ps.setString(4, authenticatedUser.getUserStoreDomain());
             rs = ps.executeQuery();
             while (rs.next()) {
-                if(rsaOaepEncryptionEnabled){
-                    String processedAccessTokenIdentifierWithPrefix = rs.getString(1);
-                    if(OAuth2Util.isStartWithOaepPrefix(processedAccessTokenIdentifierWithPrefix)){
-                        String processedAccessTokenIdentifierWithoutPrefix = processedAccessTokenIdentifierWithPrefix.substring(4);
-                        accessTokens.add(persistenceProcessor.getPreprocessedAccessTokenIdentifier(processedAccessTokenIdentifierWithoutPrefix));
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    String accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(rs.getString(1));
+                    accessTokens.add(accessToken);
+                    if (!OAuth2Util.isStartWithOaepPrefix(rs.getString(1))) {
+                        updateNewEncryptedToken(connection, accessToken, rs.getString(1));
                     }
-
-                }else {
+                } else {
                     accessTokens.add(persistenceProcessor.getPreprocessedAccessTokenIdentifier(rs.getString(1)));
                 }
             }
@@ -1498,14 +1627,13 @@ public class TokenMgtDAO {
 
                 // if authorization code is not expired.
                 if (OAuth2Util.calculateValidityInMillis(issuedTimeInMillis, validityPeriodInMillis) >= 1000) {
-                    if(rsaOaepEncryptionEnabled){
-                        String processedAuthzCodeWithPrefix = rs.getString(1);
-                        if(OAuth2Util.isStartWithOaepPrefix(processedAuthzCodeWithPrefix)){
-                            String processedAuthzCodeWithoutPrefix = processedAuthzCodeWithPrefix.substring(4);
-                            authorizationCodes.add(persistenceProcessor.getPreprocessedAuthzCode(processedAuthzCodeWithoutPrefix));
+                    if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                        String authzCode = persistenceProcessor.getPreprocessedAuthzCode(rs.getString(1));
+                        authorizationCodes.add(authzCode);
+                        if (!OAuth2Util.isStartWithOaepPrefix(rs.getString(1))) {
+                            updateNewEncryptedAuthzCode(connection, authzCode, rs.getString(1));
                         }
-
-                    }else {
+                    } else {
                         authorizationCodes.add(persistenceProcessor.getPreprocessedAuthzCode(rs.getString(1)));
                     }
                 }
@@ -1550,14 +1678,13 @@ public class TokenMgtDAO {
             ps.setString(2, OAuthConstants.TokenStates.TOKEN_STATE_ACTIVE);
             rs = ps.executeQuery();
             while (rs.next()) {
-                if(rsaOaepEncryptionEnabled){
-                    String processedAccessTokenIdentifierWithPrefix = rs.getString(1);
-                    if(OAuth2Util.isStartWithOaepPrefix(processedAccessTokenIdentifierWithPrefix)){
-                        String processedAccessTokenIdentifierWithoutPrefix = processedAccessTokenIdentifierWithPrefix.substring(4);
-                        accessTokens.add(persistenceProcessor.getPreprocessedAccessTokenIdentifier(processedAccessTokenIdentifierWithoutPrefix));
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    String accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(rs.getString(1));
+                    accessTokens.add(persistenceProcessor.getPreprocessedAccessTokenIdentifier(rs.getString(1)));
+                    if (!OAuth2Util.isStartWithOaepPrefix(rs.getString(1))) {
+                        updateNewEncryptedToken(connection, accessToken, rs.getString(1));
                     }
-
-                }else {
+                } else {
                     accessTokens.add(persistenceProcessor.getPreprocessedAccessTokenIdentifier(rs.getString(1)));
                 }
             }
@@ -1657,13 +1784,12 @@ public class TokenMgtDAO {
             ps.setString(1, consumerKey);
             rs = ps.executeQuery();
             while (rs.next()) {
-                if(rsaOaepEncryptionEnabled){
-                    String processedAuthzCodeWithPrefix = rs.getString(1);
-                    if(OAuth2Util.isStartWithOaepPrefix(processedAuthzCodeWithPrefix)){
-                        String processedAuthzCodeWithoutPrefix = processedAuthzCodeWithPrefix.substring(4);
-                        authorizationCodes.add(persistenceProcessor.getPreprocessedAuthzCode(processedAuthzCodeWithoutPrefix));
+                if(OAuth2Util.checkRsaOaepEncryptionEnabled()){
+                    String authorizationCode = persistenceProcessor.getPreprocessedAuthzCode(rs.getString(1));
+                    authorizationCodes.add(authorizationCode);
+                    if(!OAuth2Util.isStartWithOaepPrefix(rs.getString(1))){
+                        updateNewEncryptedAuthzCode(connection,authorizationCode,rs.getString(1));
                     }
-
                 }else {
                     authorizationCodes.add(persistenceProcessor.getPreprocessedAuthzCode(rs.getString(1)));
                 }
@@ -1691,14 +1817,13 @@ public class TokenMgtDAO {
             ps.setString(2, OAuthConstants.AuthorizationCodeState.ACTIVE);
             rs = ps.executeQuery();
             while (rs.next()) {
-                if(rsaOaepEncryptionEnabled){
-                    String processedAuthzCodeWithPrefix = rs.getString(1);
-                    if(OAuth2Util.isStartWithOaepPrefix(processedAuthzCodeWithPrefix)){
-                        String processedAuthzCodeWithoutPrefix = processedAuthzCodeWithPrefix.substring(4);
-                        authorizationCodes.add(persistenceProcessor.getPreprocessedAuthzCode(processedAuthzCodeWithoutPrefix));
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    String authorizationCode = persistenceProcessor.getPreprocessedAuthzCode(rs.getString(1));
+                    authorizationCodes.add(authorizationCode);
+                    if (!OAuth2Util.isStartWithOaepPrefix(rs.getString(1))) {
+                        updateNewEncryptedAuthzCode(connection, authorizationCode, rs.getString(1));
                     }
-
-                }else {
+                } else {
                     authorizationCodes.add(persistenceProcessor.getPreprocessedAuthzCode(rs.getString(1)));
                 }
             }
@@ -2029,29 +2154,25 @@ public class TokenMgtDAO {
 
             while (resultSet.next()) {
                 String accessToken = null;
-                if(rsaOaepEncryptionEnabled){
-                    String processedAccessTokenIdentifierWithPrefix = resultSet.getString(1);
-                    if(OAuth2Util.isStartWithOaepPrefix(processedAccessTokenIdentifierWithPrefix)){
-                        String processedAccessTokenIdentifierWithoutPrefix = processedAccessTokenIdentifierWithPrefix.substring(4);
-                        accessToken = persistenceProcessor.
-                                getPreprocessedAccessTokenIdentifier(processedAccessTokenIdentifierWithoutPrefix);
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    accessToken = persistenceProcessor.
+                            getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
+                    if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
+                        updateNewEncryptedToken(connection, accessToken, resultSet.getString(1));
                     }
-
-                }else {
+                } else {
                     accessToken = persistenceProcessor.
                             getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
                 }
                 if (accessTokenDOMap.get(accessToken) == null) {
                     String refreshToken = null;
-                    if(rsaOaepEncryptionEnabled){
-                        String processedRefreshTokenWithPrefix = resultSet.getString(2);
-                        if(OAuth2Util.isStartWithOaepPrefix(processedRefreshTokenWithPrefix)){
-                            String processedRefreshTokenIdentifierWithoutPrefix = processedRefreshTokenWithPrefix.substring(4);
-                            refreshToken = persistenceProcessor.
-                                    getPreprocessedRefreshToken(processedRefreshTokenIdentifierWithoutPrefix);
+                    if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                        refreshToken = persistenceProcessor.
+                                getPreprocessedRefreshToken(resultSet.getString(2));
+                        if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(2))) {
+                            updateNewEncryptedRefreshToken(connection, refreshToken, resultSet.getString(2));
                         }
-
-                    }else {
+                    } else {
                         refreshToken = persistenceProcessor.
                                 getPreprocessedRefreshToken(resultSet.getString(2));
                     }
@@ -2117,27 +2238,23 @@ public class TokenMgtDAO {
 
             while (resultSet.next()) {
                 String accessToken = null;
-                if(rsaOaepEncryptionEnabled){
-                    String processedAccessTokenIdentifierWithPrefix = resultSet.getString(1);
-                    if(OAuth2Util.isStartWithOaepPrefix(processedAccessTokenIdentifierWithPrefix)){
-                        String processedAccessTokenIdentifierWithoutPrefix = processedAccessTokenIdentifierWithPrefix.substring(4);
-                        accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(processedAccessTokenIdentifierWithoutPrefix);
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
+                    if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
+                        updateNewEncryptedToken(connection, accessToken, resultSet.getString(1));
                     }
-
-                }else {
+                } else {
                     accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
                 }
                 if (accessTokenDOMap.get(accessToken) == null) {
                     String refreshToken = null;
-                    if(rsaOaepEncryptionEnabled){
-                        String processedRefreshTokenWithPrefix = resultSet.getString(2);
-                        if(OAuth2Util.isStartWithOaepPrefix(processedRefreshTokenWithPrefix)){
-                            String processedRefreshTokenIdentifierWithoutPrefix = processedRefreshTokenWithPrefix.substring(4);
-                            refreshToken = persistenceProcessor.
-                                    getPreprocessedRefreshToken(processedRefreshTokenIdentifierWithoutPrefix);
+                    if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                        refreshToken = persistenceProcessor.
+                                getPreprocessedRefreshToken(resultSet.getString(2));
+                        if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(2))) {
+                            updateNewEncryptedRefreshToken(connection, refreshToken, resultSet.getString(2));
                         }
-
-                    }else {
+                    } else {
                         refreshToken = persistenceProcessor.
                                 getPreprocessedRefreshToken(resultSet.getString(2));
                     }
@@ -2332,16 +2449,14 @@ public class TokenMgtDAO {
         ResultSet resultSet = null;
         try {
             String sql;
-            if(rsaOaepEncryptionEnabled){
+            if(OAuth2Util.checkRsaOaepEncryptionEnabled()){
                 sql = SQLQueries.RETRIEVE_CODE_ID_BY_AUTHORIZATION_CODE_WITH_HASH;
             }else{
                 sql = SQLQueries.RETRIEVE_CODE_ID_BY_AUTHORIZATION_CODE;
             }
             prepStmt = connection.prepareStatement(sql);
-            if(rsaOaepEncryptionEnabled){
-                TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-                String hashedAuthzCode = tokenPersistenceProcessor.getProcessedAuthzCode(authzCode);
-                prepStmt.setString(1, hashedAuthzCode);
+            if(OAuth2Util.checkRsaOaepEncryptionEnabled()){
+                prepStmt.setString(1, OAuth2Util.hashAuthzCode(authzCode));
             }else {
                 prepStmt.setString(1, persistenceProcessor.getProcessedAuthzCode(authzCode));
             }
@@ -2349,6 +2464,19 @@ public class TokenMgtDAO {
 
             if (resultSet.next()) {
                 return resultSet.getString("CODE_ID");
+            }else{
+                if( OAuth2Util.checkRsaOaepEncryptionEnabled() && isRsaEncryptedAuthorizationCodeAvailable(connection,
+                        authzCode)){
+                    prepStmt = connection.prepareStatement(SQLQueries.RETRIEVE_CODE_ID_BY_AUTHORIZATION_CODE);
+                    prepStmt.setString(1, OAuth2Util.encryptWithRSA(authzCode));
+                    resultSet = prepStmt.executeQuery();
+                    if (resultSet.next()) {
+                        String codeId = resultSet.getString("CODE_ID");
+                        updateNewEncryptedAuthzCode(connection,authzCode,OAuth2Util.encryptWithRSA(authzCode));
+                        return codeId;
+                    }
+
+                }
             }
             connection.commit();
             return null;
@@ -2419,7 +2547,7 @@ public class TokenMgtDAO {
         ResultSet resultSet = null;
         try {
             String sql;
-            if (rsaOaepEncryptionEnabled) {
+            if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
                 sql = OAuth2Util.getTokenPartitionedSqlByUserStore(SQLQueries.RETRIEVE_TOKEN_ID_BY_TOKEN_WITH_HASH,
                         userStoreDomain);
             }else{
@@ -2427,17 +2555,29 @@ public class TokenMgtDAO {
                         userStoreDomain);
             }
             prepStmt = connection.prepareStatement(sql);
-            if(rsaOaepEncryptionEnabled){
-                TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-                String hashedAccessToken = tokenPersistenceProcessor.getProcessedAccessTokenIdentifier(token);
-                prepStmt.setString(1, hashedAccessToken);
-            }else {
+            if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                prepStmt.setString(1, OAuth2Util.hashAccessTokenIdentifier(token));
+            } else {
                 prepStmt.setString(1, persistenceProcessor.getProcessedAccessTokenIdentifier(token));
             }
             resultSet = prepStmt.executeQuery();
 
             if (resultSet.next()) {
                 return resultSet.getString("TOKEN_ID");
+            }else{
+                if(isRsaEncryptedAccessTokenAvailable(connection,token)){
+                    prepStmt = connection.prepareStatement(OAuth2Util.getTokenPartitionedSqlByUserStore(SQLQueries.RETRIEVE_TOKEN_ID_BY_TOKEN,
+                            userStoreDomain));
+                    prepStmt.setString(1, OAuth2Util.encryptWithRSA(token));
+                    resultSet = prepStmt.executeQuery();
+                    if (resultSet.next()) {
+                        String tokenId = resultSet.getString("TOKEN_ID");
+                        updateNewEncryptedToken(connection,token,OAuth2Util.encryptWithRSA(token));
+                        connection.commit();
+                        return tokenId;
+                    }
+
+                }
             }
             connection.commit();
             return null;
@@ -2682,19 +2822,34 @@ public class TokenMgtDAO {
                         authContextTokenQueue.push(new AuthContextTokenDO(authzCode));
                     } else {
                         String authCodeStoreTable = OAuthConstants.AUTHORIZATION_CODE_STORE_TABLE;
-
-                        String sqlQuery = SQLQueries.UPDATE_AUTHORIZATION_CODE_STATE.replace(IDN_OAUTH2_AUTHORIZATION_CODE,
-                                authCodeStoreTable);
+                        String sqlQuery;
+                        if(OAuth2Util.checkRsaOaepEncryptionEnabled()){
+                            sqlQuery = SQLQueries.UPDATE_AUTHORIZATION_CODE_STATE_WITH_HASH.replace(IDN_OAUTH2_AUTHORIZATION_CODE,
+                                    authCodeStoreTable);
+                        }else {
+                            sqlQuery = SQLQueries.UPDATE_AUTHORIZATION_CODE_STATE
+                                    .replace(IDN_OAUTH2_AUTHORIZATION_CODE, authCodeStoreTable);
+                        }
                         deactiveActiveCodesStatement = connection.prepareStatement(sqlQuery);
                         deactiveActiveCodesStatement.setString(1, OAuthConstants.AuthorizationCodeState.REVOKED);
-                        if (rsaOaepEncryptionEnabled) {
-                            TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-                            String hashedAuthzCode = tokenPersistenceProcessor.getProcessedAuthzCode(authzCode);
-                            deactiveActiveCodesStatement.setString(2, hashedAuthzCode);
+                        if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                            deactiveActiveCodesStatement.setString(2, OAuth2Util.hashAuthzCode(authzCode));
                         }else {
                             deactiveActiveCodesStatement.setString(2, persistenceProcessor.getProcessedAuthzCode(authzCode));
                         }
-                        deactiveActiveCodesStatement.execute();
+                        int count = deactiveActiveCodesStatement.executeUpdate();
+                        if(count == 0){
+                            if(OAuth2Util.checkRsaOaepEncryptionEnabled() && isRsaEncryptedAuthorizationCodeAvailable
+                                    (connection,authzCode)){
+                                PreparedStatement preparedStatement = null;
+                                preparedStatement = connection.prepareStatement(SQLQueries.UPDATE_AUTHORIZATION_CODE_STATE
+                                        .replace(IDN_OAUTH2_AUTHORIZATION_CODE, authCodeStoreTable));
+                                preparedStatement.setString(1, OAuthConstants.AuthorizationCodeState.REVOKED);
+                                preparedStatement.setString(2, OAuth2Util.encryptWithRSA(authzCode));
+                                preparedStatement.executeUpdate();
+                                updateNewEncryptedAuthzCode(connection,authzCode,OAuth2Util.encryptWithRSA(authzCode));
+                            }
+                        }
 
                     }
                 }
@@ -2883,29 +3038,29 @@ public class TokenMgtDAO {
                         if (latestIssuedTime == issuedTime) {
                             String tokenState = resultSet.getString(7);
                             String accessToken = null;
-                            if(rsaOaepEncryptionEnabled){
-                                String processedAccessTokenIdentifierWithPrefix = resultSet.getString(1);
-                                if(OAuth2Util.isStartWithOaepPrefix(processedAccessTokenIdentifierWithPrefix)){
-                                    String processedAccessTokenIdentifierWithoutPrefix = processedAccessTokenIdentifierWithPrefix.substring(4);
-                                    accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(
-                                            processedAccessTokenIdentifierWithoutPrefix);
+                            if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                                accessToken = persistenceProcessor
+                                        .getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
+                                if (OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
+                                    updateNewEncryptedToken(connection, accessToken,
+                                            resultSet.getString(1));
                                 }
-
-                            }else {
-                                accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
+                            } else {
+                                accessToken = persistenceProcessor
+                                        .getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
                             }
                             String refreshToken = null;
                             if (resultSet.getString(2) != null) {
-                                if(rsaOaepEncryptionEnabled){
-                                    String processedRefreshTokenWithPrefix = resultSet.getString(2);
-                                    if(OAuth2Util.isStartWithOaepPrefix(processedRefreshTokenWithPrefix)){
-                                        String processedRefreshTokenIdentifierWithoutPrefix = processedRefreshTokenWithPrefix.substring(4);
-                                        refreshToken = persistenceProcessor.
-                                                getPreprocessedRefreshToken(processedRefreshTokenIdentifierWithoutPrefix);
+                                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                                    refreshToken = persistenceProcessor
+                                            .getPreprocessedRefreshToken(resultSet.getString(2));
+                                    if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(2))) {
+                                        updateNewEncryptedRefreshToken(connection, refreshToken,
+                                                resultSet.getString(2));
                                     }
-
-                                }else {
-                                    refreshToken = persistenceProcessor.getPreprocessedRefreshToken(resultSet.getString(2));
+                                } else {
+                                    refreshToken = persistenceProcessor
+                                            .getPreprocessedRefreshToken(resultSet.getString(2));
                                 }
                             }
                             long refreshTokenIssuedTime = resultSet.getTimestamp(4,
@@ -3033,28 +3188,22 @@ public class TokenMgtDAO {
 
             if (resultSet.next()) {
                 String accessToken = null;
-                if(rsaOaepEncryptionEnabled){
-                    String processedAccessTokenIdentifierWithPrefix = resultSet.getString(1);
-                    if(OAuth2Util.isStartWithOaepPrefix(processedAccessTokenIdentifierWithPrefix)){
-                        String processedAccessTokenIdentifierWithoutPrefix = processedAccessTokenIdentifierWithPrefix.substring(4);
-                        accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(
-                                processedAccessTokenIdentifierWithoutPrefix);
+                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
+                    if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
+                        updateNewEncryptedToken(connection, accessToken, resultSet.getString(1));
                     }
-
-                }else {
+                } else {
                     accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
                 }
                 String refreshToken = null;
                 if (resultSet.getString(2) != null) {
-                    if(rsaOaepEncryptionEnabled){
-                        String processedRefreshTokenWithPrefix = resultSet.getString(2);
-                        if(OAuth2Util.isStartWithOaepPrefix(processedRefreshTokenWithPrefix)){
-                            String processedRefreshTokenIdentifierWithoutPrefix = processedRefreshTokenWithPrefix.substring(4);
-                            refreshToken = persistenceProcessor.
-                                    getPreprocessedRefreshToken(processedRefreshTokenIdentifierWithoutPrefix);
+                    if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                        refreshToken = persistenceProcessor.getPreprocessedRefreshToken(resultSet.getString(2));
+                        if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(2))) {
+                            updateNewEncryptedRefreshToken(connection, refreshToken, resultSet.getString(2));
                         }
-
-                    }else {
+                    } else {
                         refreshToken = persistenceProcessor.getPreprocessedRefreshToken(resultSet.getString(2));
                     }
                 }
@@ -3098,19 +3247,115 @@ public class TokenMgtDAO {
     }
 
     /**
-     * Check whether new RSA+OAEP encryption algorithm is enabled
+     * Method to update refresh tokens encrypted with RSA to RSA+OAEP
+     * @param connection
+     * @param decryptedrefreshToken
+     * @param oldEncryptedToken
      * @throws SQLException
+     * @throws IdentityOAuth2Exception
      */
-    private void checkRsaOaepEncryptionEnabled() throws SQLException {
-        String cipherTransformation = System.getProperty(CIPHER_TRANSFORMATION_SYSTEM_PROPERTY);
-        if (cipherTransformation != null && OAuth2ServiceComponentHolder.isEncryptionDecryptionProcessor()) {
-            if (OAuth2Util.checkHashColumn(IDN_OAUTH2_ACCESS_TOKEN, ACCESS_TOKEN_HASH) && OAuth2Util
-                    .checkHashColumn(IDN_OAUTH2_ACCESS_TOKEN, REFRESH_TOKEN_HASH)) {
-                rsaOaepEncryptionEnabled = true;
-            } else {
-                log.error("Required column" + ACCESS_TOKEN_HASH + " & " + REFRESH_TOKEN_HASH + " missing");
-            }
+    private void updateNewEncryptedRefreshToken(Connection connection, String decryptedrefreshToken,
+            String oldEncryptedToken) throws SQLException, IdentityOAuth2Exception {
+        PreparedStatement prepStmt = null;
+        prepStmt = connection.prepareStatement(SQLQueries.UPDATE_REFRESH_TOKEN);
+        prepStmt.setString(1,
+                persistenceProcessor.getProcessedRefreshToken(decryptedrefreshToken));
+        prepStmt.setString(2, OAuth2Util.hashRefreshToken(decryptedrefreshToken));
+        prepStmt.setString(3, oldEncryptedToken);
+        prepStmt.executeUpdate();
 
+    }
+
+    /**
+     * Method to update access tokens encrypted with RSA to RSA+OAEP
+     * @param connection
+     * @param decryptedAccessTokenIdentifier
+     * @param oldEncryptedToken
+     * @throws SQLException
+     * @throws IdentityOAuth2Exception
+     */
+    private void updateNewEncryptedToken(Connection connection, String decryptedAccessTokenIdentifier,
+            String oldEncryptedToken) throws SQLException, IdentityOAuth2Exception {
+        PreparedStatement prepStmt = null;
+        prepStmt = connection.prepareStatement(SQLQueries.UPDATE_ACCESS_TOKEN);
+        prepStmt.setString(1, persistenceProcessor.getProcessedAccessTokenIdentifier(decryptedAccessTokenIdentifier));
+        prepStmt.setString(2, OAuth2Util.hashAccessTokenIdentifier(decryptedAccessTokenIdentifier));
+        prepStmt.setString(3, oldEncryptedToken);
+        prepStmt.executeUpdate();
+
+    }
+
+    private void updateNewEncryptedAuthzCode(Connection connection, String decryptedAuthzCode,
+            String oldEncryptedAuthzCode) throws SQLException, IdentityOAuth2Exception {
+        PreparedStatement prepStmt = null;
+        prepStmt = connection.prepareStatement(SQLQueries.UPDATE_AUTHORIZATION_CODE);
+        prepStmt.setString(1, persistenceProcessor.getProcessedAuthzCode(decryptedAuthzCode));
+        prepStmt.setString(2, OAuth2Util.hashAuthzCode(decryptedAuthzCode));
+        prepStmt.setString(3, oldEncryptedAuthzCode);
+        prepStmt.executeUpdate();
+
+    }
+
+    /**
+     * Check wether authorization code encrypted with old RSA algorithm is available
+     * @param connection
+     * @param authorizationKey
+     * @return
+     * @throws SQLException
+     * @throws IdentityOAuth2Exception
+     */
+    private boolean isRsaEncryptedAuthorizationCodeAvailable(Connection connection, String authorizationKey)
+            throws SQLException, IdentityOAuth2Exception {
+        PreparedStatement prepStmt = null;
+        prepStmt = connection.prepareStatement(SQLQueries.CHECK_AUTHORIZATION_CODE);
+        prepStmt.setString(1,OAuth2Util.encryptWithRSA(authorizationKey));
+        ResultSet resultSet = prepStmt.executeQuery();
+        if(resultSet.next()){
+            return true;
+        }else{
+            return false;
+        }
+    }
+
+    /**
+     * Check wether refresh token encrypted with old RSA algorithm is available
+     * @param connection
+     * @param refreshToken
+     * @return
+     * @throws SQLException
+     * @throws IdentityOAuth2Exception
+     */
+    private boolean isRsaEncryptedRefreshTokenAvailable(Connection connection, String refreshToken)
+            throws SQLException, IdentityOAuth2Exception {
+        PreparedStatement prepStmt = null;
+        prepStmt = connection.prepareStatement(SQLQueries.CHECK_REFRESH_TOKEN);
+        prepStmt.setString(1,OAuth2Util.encryptWithRSA(refreshToken));
+        ResultSet resultSet = prepStmt.executeQuery();
+        if(resultSet.next()){
+            return true;
+        }else{
+            return false;
+        }
+    }
+
+    /**
+     * Check wether access token encrypted with old RSA algorithm is available
+     * @param connection
+     * @param accessTOken
+     * @return
+     * @throws SQLException
+     * @throws IdentityOAuth2Exception
+     */
+    private boolean isRsaEncryptedAccessTokenAvailable(Connection connection, String accessTOken)
+            throws SQLException, IdentityOAuth2Exception {
+        PreparedStatement prepStmt = null;
+        prepStmt = connection.prepareStatement(SQLQueries.CHECK_ACCESS_TOKEN);
+        prepStmt.setString(1,OAuth2Util.encryptWithRSA(accessTOken));
+        ResultSet resultSet = prepStmt.executeQuery();
+        if(resultSet.next()){
+            return true;
+        }else{
+            return false;
         }
     }
 
