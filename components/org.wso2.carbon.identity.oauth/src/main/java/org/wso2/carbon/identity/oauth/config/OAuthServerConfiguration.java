@@ -247,6 +247,7 @@ public class OAuthServerConfiguration {
         // read refresh token renewal config
         parseRefreshTokenRenewalConfiguration(oauthElem);
 
+        // read hash algorithm type config
         parseHashAlgorithm(oauthElem);
 
         // read token persistence processor config
@@ -1264,13 +1265,13 @@ public class OAuthServerConfiguration {
         }
     }
 
-    private void parseHashAlgorithm(OMElement oauthConfigElem){
-        OMElement hashingAlgorithmElement = oauthConfigElem.getFirstChildWithName(getQNameWithIdentityNS(
-                ConfigElements.HASH_ALGORITHM));
-        if(hashingAlgorithmElement != null){
-                hashAlgorithm = hashingAlgorithmElement.getText();
+    private void parseHashAlgorithm(OMElement oauthConfigElem) {
+        OMElement hashingAlgorithmElement = oauthConfigElem
+                .getFirstChildWithName(getQNameWithIdentityNS(ConfigElements.HASH_ALGORITHM));
+        if (hashingAlgorithmElement != null) {
+            hashAlgorithm = hashingAlgorithmElement.getText();
         }
-        if(log.isDebugEnabled()){
+        if (log.isDebugEnabled()) {
             log.debug("Hash algorithm was set to : " + hashAlgorithm);
         }
 
