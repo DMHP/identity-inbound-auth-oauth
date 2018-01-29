@@ -1028,15 +1028,20 @@ public class TokenMgtDAO {
                 sqlWithHash = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_WITH_HASH_MYSQL;
                 sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_MYSQL;
             } else if (connection.getMetaData().getDatabaseProductName().contains("DB2")) {
+                sqlWithHash = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_WITH_HASH_DB2SQL;
                 sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_DB2SQL;
             } else if (connection.getMetaData().getDriverName().contains("MS SQL")
                     || connection.getMetaData().getDriverName().contains("Microsoft")) {
+                sqlWithHash = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_WITH_HASH_MSSQL;
                 sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_MSSQL;
             } else if (connection.getMetaData().getDriverName().contains("PostgreSQL")) {
+                sqlWithHash = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_WITH_HASH_POSTGRESQL;
                 sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_POSTGRESQL;
             } else if (connection.getMetaData().getDriverName().contains("INFORMIX")) {
+                sqlWithHash = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_WITH_HASH_INFORMIX;
                 sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_INFORMIX;
             } else {
+                sqlWithHash = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_WITH_HASH_ORACLE;
                 sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_VALIDATION_DATA_ORACLE;
             }
 
