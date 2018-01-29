@@ -253,7 +253,7 @@ public class OAuthAppDAO {
         } catch (IdentityOAuth2Exception e) {
             throw new IdentityOAuthAdminException("Error occurred while processing client id and client secret by " +
                     "TokenPersistenceProcessor", e);
-        }finally {
+        } finally {
             IdentityDatabaseUtil.closeAllConnections(connection, rSet, prepStmt);
         }
         return oauthAppsOfUser;
@@ -498,10 +498,8 @@ public class OAuthAppDAO {
                         if (log.isDebugEnabled()) {
                             log.debug("No. of records updated for updating consumer application. : " + count);
                         }
-                        //if (count > 0) {
-                            updateNewEncryptedClientSecret(connection, oauthAppDO.getOauthConsumerSecret(),
-                                    OAuth2Util.encryptWithRSA(oauthAppDO.getOauthConsumerSecret()));
-                       // }
+                        updateNewEncryptedClientSecret(connection, oauthAppDO.getOauthConsumerSecret(),
+                                OAuth2Util.encryptWithRSA(oauthAppDO.getOauthConsumerSecret()));
                     }
                 }
             }
