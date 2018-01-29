@@ -698,11 +698,11 @@ public class OAuthAppDAO {
             throws SQLException, IdentityOAuth2Exception {
         PreparedStatement prepStmt = null;
         prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.CHECK_CONSUMER_SECRET);
-        prepStmt.setString(1,OAuth2Util.encryptWithRSA(clientSecret));
+        prepStmt.setString(1, OAuth2Util.encryptWithRSA(clientSecret));
         ResultSet resultSet = prepStmt.executeQuery();
-        if(resultSet.next()){
+        if (resultSet.next()) {
             return true;
-        }else{
+        } else {
             return false;
         }
     }
