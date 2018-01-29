@@ -21,6 +21,10 @@ import org.apache.commons.codec.digest.DigestUtils;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 
+/**
+ * An implementation of <Code>TokenPersistenceProcessor</Code>
+ * which is used when storing hashed tokens.
+ */
 public class HashingPersistenceProcessor implements TokenPersistenceProcessor{
 
     @Override
@@ -75,7 +79,13 @@ public class HashingPersistenceProcessor implements TokenPersistenceProcessor{
         return null;
     }
 
-    public static String hash(String plainText) {
+    /**
+     * Method to generate hash value
+     * @param plainText
+     * @return hashed value
+     */
+    private String hash(String plainText) {
+
         String hashAlgorithm = OAuthServerConfiguration.getInstance().getHashAlgorithm();
         if (plainText != null) {
             if ("SHA256".equals(hashAlgorithm)) {
@@ -87,7 +97,6 @@ public class HashingPersistenceProcessor implements TokenPersistenceProcessor{
             } else {
                 return DigestUtils.sha256Hex(plainText);
             }
-
         } else {
             return null;
         }
