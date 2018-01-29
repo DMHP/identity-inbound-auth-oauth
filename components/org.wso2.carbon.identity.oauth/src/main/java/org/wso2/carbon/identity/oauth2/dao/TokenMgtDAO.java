@@ -908,6 +908,9 @@ public class TokenMgtDAO {
                 prepStmt.setString(1, authzCodeDO.getOauthTokenId());
                 if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
                     prepStmt.setString(2, OAuth2Util.hashAuthzCode(authzCodeDO.getAuthorizationCode()));
+                    if (isRsaEncryptedAuthorizationCodeAvailable(connection, authzCodeDO.getAuthorizationCode())) {
+                        prepStmt.setString(2, OAuth2Util.encryptWithRSA(authzCodeDO.getAuthorizationCode()));
+                    }
                 } else {
                     prepStmt.setString(2,
                             persistenceProcessor.getProcessedAuthzCode(authzCodeDO.getAuthorizationCode()));
@@ -1388,9 +1391,12 @@ public class TokenMgtDAO {
                 for (String token : tokens) {
                     ps.setString(1, OAuthConstants.TokenStates.TOKEN_STATE_REVOKED);
                     ps.setString(2, UUID.randomUUID().toString());
-                    if(OAuth2Util.checkRsaOaepEncryptionEnabled()){
+                    if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
                         ps.setString(3, OAuth2Util.hashAccessTokenIdentifier(token));
-                    }else {
+                        if (isRsaEncryptedAccessTokenAvailable(connection, token)) {
+                            ps.setString(3, OAuth2Util.encryptWithRSA(token));
+                        }
+                    } else {
                         ps.setString(3, persistenceProcessor.getProcessedAccessTokenIdentifier(token));
                     }
                     ps.addBatch();

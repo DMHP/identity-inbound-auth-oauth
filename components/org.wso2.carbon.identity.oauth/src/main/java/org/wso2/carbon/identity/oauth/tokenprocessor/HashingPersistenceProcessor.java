@@ -18,6 +18,7 @@
 package org.wso2.carbon.identity.oauth.tokenprocessor;
 
 import org.apache.commons.codec.digest.DigestUtils;
+import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 
 public class HashingPersistenceProcessor implements TokenPersistenceProcessor{
@@ -75,8 +76,18 @@ public class HashingPersistenceProcessor implements TokenPersistenceProcessor{
     }
 
     public static String hash(String plainText) {
+        String hashAlgorithm = OAuthServerConfiguration.getInstance().getHashAlgorithm();
         if (plainText != null) {
-            return DigestUtils.md5Hex(plainText);
+            if ("SHA256".equals(hashAlgorithm)) {
+                return DigestUtils.sha256Hex(plainText);
+            } else if ("SHA512".equals(hashAlgorithm)) {
+                return DigestUtils.sha512Hex(plainText);
+            } else if ("SHA384".equals(plainText)) {
+                return DigestUtils.sha384Hex(plainText);
+            } else {
+                return DigestUtils.sha256Hex(plainText);
+            }
+
         } else {
             return null;
         }
