@@ -31,9 +31,6 @@ import org.wso2.carbon.identity.base.IdentityRuntimeException;
 import org.wso2.carbon.identity.core.util.IdentityCoreInitializedEvent;
 import org.wso2.carbon.identity.core.util.IdentityDatabaseUtil;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
-import org.wso2.carbon.identity.oauth.internal.OAuthComponentServiceHolder;
-import org.wso2.carbon.identity.oauth.tokenprocessor.EncryptionDecryptionPersistenceProcessor;
-import org.wso2.carbon.identity.oauth.tokenprocessor.TokenPersistenceProcessor;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 import org.wso2.carbon.identity.oauth2.OAuth2Service;
 import org.wso2.carbon.identity.oauth2.OAuth2TokenValidationService;
@@ -67,7 +64,6 @@ import java.sql.SQLException;
 public class OAuth2ServiceComponent {
     private static Log log = LogFactory.getLog(OAuth2ServiceComponent.class);
     private static BundleContext bundleContext;
-    //private TokenPersistenceProcessor persistenceProcessor;
 
     protected void activate(ComponentContext context) throws  BundleException {
         int tenantId = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantId();
