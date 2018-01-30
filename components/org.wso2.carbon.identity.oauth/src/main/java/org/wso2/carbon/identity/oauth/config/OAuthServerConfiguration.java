@@ -457,7 +457,7 @@ public class OAuthServerConfiguration {
         return isRefreshTokenRenewalEnabled;
     }
 
-    public String getHashAlgorithm(){
+    public String getHashAlgorithm() {
         return hashAlgorithm;
     }
 
@@ -1266,6 +1266,7 @@ public class OAuthServerConfiguration {
     }
 
     private void parseHashAlgorithm(OMElement oauthConfigElem) {
+
         OMElement hashingAlgorithmElement = oauthConfigElem
                 .getFirstChildWithName(getQNameWithIdentityNS(ConfigElements.HASH_ALGORITHM));
         if (hashingAlgorithmElement != null) {
@@ -1274,7 +1275,6 @@ public class OAuthServerConfiguration {
         if (log.isDebugEnabled()) {
             log.debug("Hash algorithm was set to : " + hashAlgorithm);
         }
-
     }
 
     private void parseAccessTokenPartitioningConfig(OMElement oauthConfigElem) {

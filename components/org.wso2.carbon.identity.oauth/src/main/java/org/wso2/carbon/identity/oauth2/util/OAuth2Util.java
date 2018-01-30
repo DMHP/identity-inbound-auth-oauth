@@ -1833,7 +1833,7 @@ public class OAuth2Util {
     public static boolean checkColumn(String tableName, String columnName) throws IdentityOAuth2Exception {
         boolean isColumnAvailable = false;
         Connection connection = IdentityDatabaseUtil.getDBConnection();
-        DatabaseMetaData md = null;
+        DatabaseMetaData md;
         ResultSet rs = null;
         try {
             md = connection.getMetaData();
@@ -1862,7 +1862,7 @@ public class OAuth2Util {
         return isAccessTokenHashColumnCreated() && isAuthzCodeHashColumnCreated() && isConsumerSecretHashColumnCreated()
                 && isRefreshTokenHashColumnCreated();
     }
-    
+
     /**
      * Method to check if a column to store access token hash is available
      * @return
