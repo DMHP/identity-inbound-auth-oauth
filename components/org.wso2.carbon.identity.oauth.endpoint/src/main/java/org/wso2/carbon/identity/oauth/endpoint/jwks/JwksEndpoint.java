@@ -19,7 +19,6 @@ package org.wso2.carbon.identity.oauth.endpoint.jwks;
 
 
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.math.BigInteger;
 import java.security.KeyStore;
 import java.security.cert.Certificate;
@@ -46,12 +45,15 @@ import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.KeyUse;
+import com.nimbusds.jose.jwk.RSAKey.Builder;
 
 public class JwksEndpoint {
     private static final Log log = LogFactory.getLog(JwksEndpoint.class);
     private static final char[] ENCODE_MAP = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".toCharArray();
-    private static final String alg = "RS256";
     private static final String use = "sig";
+    private static final String keys = "keys";
 
     @GET
     @Path(value = "/jwks")
@@ -98,19 +100,15 @@ public class JwksEndpoint {
                 publicKey = (RSAPublicKey) cert.getPublicKey();
 
             }
-            String modulus = base64EncodeUint(publicKey.getModulus());
-            String exponent = base64EncodeUint(publicKey.getPublicExponent());
-            String kty = publicKey.getAlgorithm();
             JSONArray jwksKeyArray = new JSONArray();
-            JSONObject jwksKeys = new JSONObject();
-            jwksKeys.put("kty", kty);
-            jwksKeys.put("alg", alg);
-            jwksKeys.put("use", use);
-            jwksKeys.put("kid", OAuth2Util.getThumbPrint(tenantDomain, tenantId));
-            jwksKeys.put("n", modulus);
-            jwksKeys.put("e", exponent);
+            JSONObject jwksKeys;
+            Builder jwk = new Builder(publicKey);
+            jwk.keyID(OAuth2Util.getThumbPrint(tenantDomain, IdentityTenantUtil.getTenantId(tenantDomain)));
+            jwk.keyUse(KeyUse.parse(use));
+            jwk.algorithm(JWSAlgorithm.RS256);
+            jwksKeys = new JSONObject(jwk.build().toString());
             jwksKeyArray.put(jwksKeys);
-            jwksJson.put("keys", jwksKeyArray);
+            jwksJson.put(keys, jwksKeyArray);
         } catch (Exception e) {
             String errorMesage = "Error while generating the keyset";
             log.error(errorMesage);
