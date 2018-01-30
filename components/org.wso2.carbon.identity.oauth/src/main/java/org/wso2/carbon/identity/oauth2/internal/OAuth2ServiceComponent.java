@@ -130,7 +130,7 @@ public class OAuth2ServiceComponent {
         }
 
         try {
-            if ((OAuth2Util.checkRsaOaepEncryptionEnabled() && !OAuth2Util.checkHashColumns())) {
+            if ((OAuth2Util.checkOAEPEncryptionEnabled() && !OAuth2Util.checkHashColumns())) {
                 throw new IdentityOAuth2Exception("Error occurred while checking for RSA OAEP encryption. Please "
                         + "check wether RSA+OAEP is enabled, EncryptionDecryptionPersistenceProcessor is enabled and "
                         + "necessary hash columns are created.");

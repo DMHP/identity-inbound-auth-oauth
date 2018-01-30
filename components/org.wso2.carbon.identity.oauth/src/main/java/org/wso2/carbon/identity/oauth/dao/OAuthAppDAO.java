@@ -21,7 +21,6 @@ package org.wso2.carbon.identity.oauth.dao;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.context.CarbonContext;
-import org.wso2.carbon.core.util.CryptoException;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
 import org.wso2.carbon.identity.application.common.IdentityApplicationManagementException;
 import org.wso2.carbon.identity.core.util.IdentityDatabaseUtil;
@@ -33,8 +32,6 @@ import org.wso2.carbon.identity.oauth.common.OAuthConstants;
 import org.wso2.carbon.identity.oauth.common.exception.InvalidOAuthClientException;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.identity.oauth.internal.OAuthComponentServiceHolder;
-import org.wso2.carbon.identity.oauth.tokenprocessor.EncryptionDecryptionPersistenceProcessor;
-import org.wso2.carbon.identity.oauth.tokenprocessor.HashingPersistenceProcessor;
 import org.wso2.carbon.identity.oauth.tokenprocessor.PlainTextPersistenceProcessor;
 import org.wso2.carbon.identity.oauth.tokenprocessor.TokenPersistenceProcessor;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
@@ -45,7 +42,6 @@ import org.wso2.carbon.user.core.service.RealmService;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -79,19 +75,7 @@ public class OAuthAppDAO {
 
             try {
                 if(OAuth2ServiceComponentHolder.isPkceEnabled()) {
-                    if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
-                        prepStmt = connection
-                                .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.ADD_OAUTH_APP_WITH_PKCE_WITH_HASH);
-                        prepStmt.setString(2,
-                                persistenceProcessor.getProcessedClientSecret(consumerAppDO.getOauthConsumerSecret()));
-                        prepStmt.setString(12, OAuth2Util.
-                                hashClientSecret(consumerAppDO.getOauthConsumerSecret()));
-                    } else {
-                        prepStmt = connection
-                                .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.ADD_OAUTH_APP_WITH_PKCE);
-                        prepStmt.setString(2,
-                                persistenceProcessor.getProcessedClientSecret(consumerAppDO.getOauthConsumerSecret()));
-                    }
+                    prepStmt = createPreparedStatementOAEPAddAppWithPKCE(connection, consumerAppDO);
                     prepStmt.setString(1, persistenceProcessor.getProcessedClientId(consumerAppDO.getOauthConsumerKey()));
                     prepStmt.setString(3, consumerAppDO.getUser().getUserName());
                     prepStmt.setInt(4, IdentityTenantUtil.getTenantId(consumerAppDO.getUser().getTenantDomain()));
@@ -105,16 +89,7 @@ public class OAuthAppDAO {
                     prepStmt.execute();
                     connection.commit();
                 } else {
-                    if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
-                        prepStmt = connection
-                                .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.ADD_OAUTH_APP_WITH_HASH);
-                        prepStmt.setString(2, persistenceProcessor.getProcessedClientSecret(consumerAppDO.getOauthConsumerSecret()));
-                        prepStmt.setString(10, OAuth2Util.hashClientSecret(consumerAppDO.getOauthConsumerSecret()));
-                    } else {
-                        prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.ADD_OAUTH_APP);
-                        prepStmt.setString(2,
-                                persistenceProcessor.getProcessedClientSecret(consumerAppDO.getOauthConsumerSecret()));
-                    }
+                    prepStmt = createPreparedStatementOAEPAddAppWithoutPKCE(connection, consumerAppDO);
                     prepStmt.setString(1, persistenceProcessor.getProcessedClientId(consumerAppDO.getOauthConsumerKey()));
                     prepStmt.setString(3, consumerAppDO.getUser().getUserName());
                     prepStmt.setInt(4, IdentityTenantUtil.getTenantId(consumerAppDO.getUser().getTenantDomain()));
@@ -181,6 +156,7 @@ public class OAuthAppDAO {
         PreparedStatement prepStmt = null;
         ResultSet rSet = null;
         OAuthAppDO[] oauthAppsOfUser;
+        List<ConsumerSecrets> consumerSecretsList = new ArrayList<>();
 
         try {
             RealmService realmService = OAuthComponentServiceHolder.getInstance().getRealmService();
@@ -217,11 +193,11 @@ public class OAuthAppDAO {
                 if (rSet.getString(3) != null && rSet.getString(3).length() > 0) {
                     OAuthAppDO oauthApp = new OAuthAppDO();
                     oauthApp.setOauthConsumerKey(persistenceProcessor.getPreprocessedClientId(rSet.getString(1)));
-                    if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                    if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                         String clientSecret = persistenceProcessor.getPreprocessedClientSecret(rSet.getString(2));
                         oauthApp.setOauthConsumerSecret(clientSecret);
                         if (!OAuth2Util.isStartWithOaepPrefix(rSet.getString(2))) {
-                            updateNewEncryptedClientSecret(connection, clientSecret, rSet.getString(2));
+                            consumerSecretsList.add(new ConsumerSecrets(clientSecret, rSet.getString(2)));
                         }
                     } else {
                         oauthApp.setOauthConsumerSecret(
@@ -246,6 +222,9 @@ public class OAuthAppDAO {
             }
             oauthAppsOfUser = oauthApps.toArray(new OAuthAppDO[oauthApps.size()]);
             connection.commit();
+            if (OAuth2Util.checkOAEPEncryptionEnabled()) {
+                updateListOfClientSecrets(consumerSecretsList);
+            }
         } catch (SQLException e) {
             throw new IdentityOAuthAdminException("Error occurred while retrieving OAuth consumer apps of user", e);
         } catch (UserStoreException e) {
@@ -265,6 +244,7 @@ public class OAuthAppDAO {
         ResultSet rSet = null;
         OAuthAppDO oauthApp = null;
         boolean isPKCESupportEnabled = OAuth2ServiceComponentHolder.isPkceEnabled();
+        List<ConsumerSecrets> consumerSecretsList = new ArrayList<>();
         try {
             if (isPKCESupportEnabled) {
                 prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.GET_APP_INFO_WITH_PKCE);
@@ -288,17 +268,7 @@ public class OAuthAppDAO {
                 if (rSet.getString(4) != null && rSet.getString(4).length() > 0) {
                     oauthApp = new OAuthAppDO();
                     oauthApp.setOauthConsumerKey(consumerKey);
-                    if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
-                        String clientSecret = persistenceProcessor.getPreprocessedClientSecret(rSet
-                                .getString(1));
-                        oauthApp.setOauthConsumerSecret(clientSecret);
-                        if (!OAuth2Util.isStartWithOaepPrefix(rSet.getString(1))) {
-                            updateNewEncryptedClientSecret(connection, clientSecret, rSet.getString(1));
-                        }
-                    } else {
-                        oauthApp.setOauthConsumerSecret(
-                                persistenceProcessor.getPreprocessedClientSecret(rSet.getString(1)));
-                    }
+                    setClientSecret(rSet.getString(1), oauthApp, consumerSecretsList);
                     AuthenticatedUser authenticatedUser = new AuthenticatedUser();
                     authenticatedUser.setUserName(rSet.getString(2));
                     oauthApp.setApplicationName(rSet.getString(3));
@@ -326,6 +296,9 @@ public class OAuthAppDAO {
                 throw new InvalidOAuthClientException("Cannot find an application associated with the given consumer key : " + consumerKey);
             }
             connection.commit();
+            if (OAuth2Util.checkOAEPEncryptionEnabled()) {
+                updateListOfClientSecrets(consumerSecretsList);
+            }
         } catch (SQLException e) {
             throw new IdentityOAuth2Exception("Error while retrieving the app information", e);
         } finally {
@@ -340,6 +313,7 @@ public class OAuthAppDAO {
         ResultSet rSet = null;
         OAuthAppDO oauthApp = null;
         boolean isPKCESupportEnabled = OAuth2ServiceComponentHolder.isPkceEnabled();
+        List<ConsumerSecrets> consumerSecretsList = new ArrayList<>();
         try {
             int tenantID = CarbonContext.getThreadLocalCarbonContext().getTenantId();
             if (isPKCESupportEnabled) {
@@ -367,17 +341,7 @@ public class OAuthAppDAO {
                 // There is at least one application associated with a given key
                 rSetHasRows = true;
                 if (rSet.getString(4) != null && rSet.getString(4).length() > 0) {
-                    if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
-                        String clientSecret = persistenceProcessor.getPreprocessedClientSecret(rSet.
-                                getString(1));
-                        oauthApp.setOauthConsumerSecret(clientSecret);
-                        if (!OAuth2Util.isStartWithOaepPrefix(rSet.getString(1))) {
-                            updateNewEncryptedClientSecret(connection, clientSecret, rSet.getString(1));
-                        }
-                    } else {
-                        oauthApp.setOauthConsumerSecret(
-                                persistenceProcessor.getPreprocessedClientSecret(rSet.getString(1)));
-                    }
+                    setClientSecret(rSet.getString(1), oauthApp, consumerSecretsList);
                     user.setUserName(rSet.getString(2));
                     user.setUserStoreDomain(rSet.getString(3));
                     oauthApp.setUser(user);
@@ -406,6 +370,9 @@ public class OAuthAppDAO {
                 throw new InvalidOAuthClientException(message);
             }
             connection.commit();
+            if (OAuth2Util.checkOAEPEncryptionEnabled()) {
+                updateListOfClientSecrets(consumerSecretsList);
+            }
         } catch (SQLException e) {
             throw new IdentityOAuth2Exception("Error while retrieving the app information", e);
         } finally {
@@ -417,10 +384,10 @@ public class OAuthAppDAO {
     public void updateConsumerApplication(OAuthAppDO oauthAppDO) throws IdentityOAuthAdminException {
         Connection connection = IdentityDatabaseUtil.getDBConnection();
         PreparedStatement prepStmt = null;
-
+        List<ConsumerSecrets> consumerSecretsList = new ArrayList<>();
         try {
             if (OAuth2ServiceComponentHolder.isPkceEnabled()) {
-                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                     prepStmt = connection
                             .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP_WITH_PKCE_WITH_HASH);
                 } else {
@@ -428,7 +395,7 @@ public class OAuthAppDAO {
                             .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP_WITH_PKCE);
                 }
             } else {
-                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                     prepStmt = connection
                             .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP_WITH_HASH);
                 } else {
@@ -444,17 +411,15 @@ public class OAuthAppDAO {
                 prepStmt.setString(5, oauthAppDO.isPkceSupportPlain() ? "1" : "0");
 
                 prepStmt.setString(6, persistenceProcessor.getProcessedClientId(oauthAppDO.getOauthConsumerKey()));
-
-                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                     prepStmt.setString(7, OAuth2Util.hashClientSecret(oauthAppDO.getOauthConsumerSecret()));
                 } else {
                     prepStmt.setString(7,
                             persistenceProcessor.getProcessedClientSecret(oauthAppDO.getOauthConsumerSecret()));
                 }
             } else {
-
                 prepStmt.setString(4, persistenceProcessor.getProcessedClientId(oauthAppDO.getOauthConsumerKey()));
-                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                     prepStmt.setString(5, OAuth2Util.hashClientSecret(oauthAppDO.getOauthConsumerSecret()));
                 } else {
                     prepStmt.setString(5,
@@ -466,45 +431,13 @@ public class OAuthAppDAO {
             if (log.isDebugEnabled()) {
                 log.debug("No. of records updated for updating consumer application. : " + count);
             }
-            if(count==0) {
-                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
-                    if (isRsaEncryptedClientSecretAvailable(connection, oauthAppDO.getOauthConsumerSecret())) {
-                        PreparedStatement preparedStatement = null;
-                        if (OAuth2ServiceComponentHolder.isPkceEnabled()) {
-                            preparedStatement = connection
-                                    .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP_WITH_PKCE);
-                        } else {
-                            preparedStatement = connection
-                                    .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP);
-                        }
-                        preparedStatement.setString(1, oauthAppDO.getApplicationName());
-                        preparedStatement.setString(2, oauthAppDO.getCallbackUrl());
-                        preparedStatement.setString(3, oauthAppDO.getGrantTypes());
-                        if (OAuth2ServiceComponentHolder.isPkceEnabled()) {
-                            preparedStatement.setString(4, oauthAppDO.isPkceMandatory() ? "1" : "0");
-                            preparedStatement.setString(5, oauthAppDO.isPkceSupportPlain() ? "1" : "0");
-
-                            preparedStatement.setString(6,
-                                    persistenceProcessor.getProcessedClientId(oauthAppDO.getOauthConsumerKey()));
-                            preparedStatement
-                                    .setString(7, OAuth2Util.encryptWithRSA(oauthAppDO.getOauthConsumerSecret()));
-                        } else {
-                            preparedStatement.setString(4,
-                                    persistenceProcessor.getProcessedClientId(oauthAppDO.getOauthConsumerKey()));
-                            preparedStatement
-                                    .setString(5, OAuth2Util.encryptWithRSA(oauthAppDO.getOauthConsumerSecret()));
-                        }
-                        count = preparedStatement.executeUpdate();
-                        if (log.isDebugEnabled()) {
-                            log.debug("No. of records updated for updating consumer application. : " + count);
-                        }
-                        updateNewEncryptedClientSecret(connection, oauthAppDO.getOauthConsumerSecret(),
-                                OAuth2Util.encryptWithRSA(oauthAppDO.getOauthConsumerSecret()));
-                    }
-                }
+            if (count == 0) {
+                updateConsumerApplicationWithOldRSA(connection,oauthAppDO,consumerSecretsList);
             }
-
             connection.commit();
+            if (OAuth2Util.checkOAEPEncryptionEnabled()) {
+                updateListOfClientSecrets(consumerSecretsList);
+            }
 
         } catch (SQLException e) {
             throw new IdentityOAuthAdminException("Error when updating OAuth application", e);
@@ -669,21 +602,18 @@ public class OAuthAppDAO {
     /**
      * Method to encrypt the client secret which was encrypted with old RSA algorithm  with new RSA+OAEP algorithm.
      * This will also store a hashed value of the client secret.
-     * @param connection
      * @param decryptedClientSecret
      * @param oldEncryptedClientSecret
      * @throws SQLException
      * @throws IdentityOAuth2Exception
      */
-    private void updateNewEncryptedClientSecret(Connection connection, String decryptedClientSecret,
+    private void updateNewEncryptedClientSecret(PreparedStatement prepStmt, String decryptedClientSecret,
             String oldEncryptedClientSecret) throws SQLException, IdentityOAuth2Exception {
 
-        PreparedStatement prepStmt = null;
-        prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_SECRET);
         prepStmt.setString(1, persistenceProcessor.getProcessedClientSecret(decryptedClientSecret));
         prepStmt.setString(2, OAuth2Util.hashClientSecret(decryptedClientSecret));
         prepStmt.setString(3, oldEncryptedClientSecret);
-        prepStmt.executeUpdate();
+        prepStmt.addBatch();
     }
 
     /**
@@ -700,11 +630,161 @@ public class OAuthAppDAO {
         prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.CHECK_CONSUMER_SECRET);
         prepStmt.setString(1, OAuth2Util.encryptWithRSA(clientSecret));
         ResultSet resultSet = prepStmt.executeQuery();
-        if (resultSet.next()) {
-            return true;
-        } else {
-            return false;
+        return resultSet.next();
+    }
+
+    private void updateListOfClientSecrets(List<ConsumerSecrets> consumerSecretsList) throws IdentityOAuth2Exception {
+
+        if (consumerSecretsList != null) {
+            Connection connection = IdentityDatabaseUtil.getDBConnection();
+            PreparedStatement preparedStatement = null;
+            try {
+                preparedStatement = connection
+                        .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_SECRET);
+                for (ConsumerSecrets consumerSecrets : consumerSecretsList) {
+                    updateNewEncryptedClientSecret(preparedStatement, consumerSecrets.decryptedClientSecret,
+                            consumerSecrets.oldEncryptedClientSecret);
+                }
+                preparedStatement.executeBatch();
+                connection.commit();
+            } catch (SQLException e) {
+                throw new IdentityOAuth2Exception(
+                        "Error while updating client secrets in to OAEP encryption " + "algorithm ", e);
+            } finally {
+                IdentityDatabaseUtil.closeAllConnections(connection, null, preparedStatement);
+            }
         }
+    }
+
+    /**
+     * This method will create prepared statement to store newly encrypted client secret with OAEP and hashed client
+     * secret when PKCE is enabled
+     * @param connection database connection
+     * @param consumerAppDO
+     * @return PreparedStatement
+     * @throws IdentityOAuth2Exception
+     */
+    private PreparedStatement createPreparedStatementOAEPAddAppWithPKCE(Connection connection, OAuthAppDO consumerAppDO)
+            throws IdentityOAuth2Exception {
+
+        PreparedStatement prepStmt = null;
+        try {
+            if (OAuth2Util.checkOAEPEncryptionEnabled()) {
+                prepStmt = connection
+                        .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.ADD_OAUTH_APP_WITH_PKCE_WITH_HASH);
+                prepStmt.setString(2,
+                        persistenceProcessor.getProcessedClientSecret(consumerAppDO.getOauthConsumerSecret()));
+                prepStmt.setString(12, OAuth2Util.
+                        hashClientSecret(consumerAppDO.getOauthConsumerSecret()));
+            } else {
+                prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.ADD_OAUTH_APP_WITH_PKCE);
+                prepStmt.setString(2,
+                        persistenceProcessor.getProcessedClientSecret(consumerAppDO.getOauthConsumerSecret()));
+            }
+            return prepStmt;
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception(
+                    "Error while storing new encrypted client secret and hashed client secret ", e);
+        }
+    }
+
+    /**
+     * This method will create prepared statement to store newly encrypted client secret with OAEP and hashed client
+     * secret when PKCE is not enabled
+     * @param connection
+     * @param consumerAppDO
+     * @return
+     * @throws IdentityOAuth2Exception
+     */
+    private PreparedStatement createPreparedStatementOAEPAddAppWithoutPKCE(Connection connection,
+            OAuthAppDO consumerAppDO) throws IdentityOAuth2Exception {
+
+        PreparedStatement prepStmt = null;
+        try {
+            if (OAuth2Util.checkOAEPEncryptionEnabled()) {
+                prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.ADD_OAUTH_APP_WITH_HASH);
+                prepStmt.setString(2,
+                        persistenceProcessor.getProcessedClientSecret(consumerAppDO.getOauthConsumerSecret()));
+                prepStmt.setString(10, OAuth2Util.hashClientSecret(consumerAppDO.getOauthConsumerSecret()));
+            } else {
+                prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.ADD_OAUTH_APP);
+                prepStmt.setString(2,
+                        persistenceProcessor.getProcessedClientSecret(consumerAppDO.getOauthConsumerSecret()));
+            }
+            return prepStmt;
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception(
+                    "Error while storing new encrypted client secret and hashed client secret ", e);
+        }
+    }
+
+    private void updateConsumerApplicationWithOldRSA(Connection connection, OAuthAppDO oauthAppDO,
+            List<ConsumerSecrets> consumerSecretsList)
+            throws IdentityOAuth2Exception, SQLException {
+        if (OAuth2Util.checkOAEPEncryptionEnabled()) {
+            if (isRsaEncryptedClientSecretAvailable(connection, oauthAppDO.getOauthConsumerSecret())) {
+                PreparedStatement preparedStatement = null;
+                if (OAuth2ServiceComponentHolder.isPkceEnabled()) {
+                    preparedStatement = connection
+                            .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP_WITH_PKCE);
+                } else {
+                    preparedStatement = connection
+                            .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP);
+                }
+                preparedStatement.setString(1, oauthAppDO.getApplicationName());
+                preparedStatement.setString(2, oauthAppDO.getCallbackUrl());
+                preparedStatement.setString(3, oauthAppDO.getGrantTypes());
+                if (OAuth2ServiceComponentHolder.isPkceEnabled()) {
+                    preparedStatement.setString(4, oauthAppDO.isPkceMandatory() ? "1" : "0");
+                    preparedStatement.setString(5, oauthAppDO.isPkceSupportPlain() ? "1" : "0");
+
+                    preparedStatement
+                            .setString(6, persistenceProcessor.getProcessedClientId(oauthAppDO.getOauthConsumerKey()));
+                    preparedStatement.setString(7, OAuth2Util.encryptWithRSA(oauthAppDO.getOauthConsumerSecret()));
+                    consumerSecretsList.add(new ConsumerSecrets(oauthAppDO.getOauthConsumerSecret(),
+                            OAuth2Util.encryptWithRSA(oauthAppDO.getOauthConsumerSecret())));
+                } else {
+                    preparedStatement
+                            .setString(4, persistenceProcessor.getProcessedClientId(oauthAppDO.getOauthConsumerKey()));
+                    preparedStatement.setString(5, OAuth2Util.encryptWithRSA(oauthAppDO.getOauthConsumerSecret()));
+                    consumerSecretsList.add(new ConsumerSecrets(oauthAppDO.getOauthConsumerSecret(),
+                            OAuth2Util.encryptWithRSA(oauthAppDO.getOauthConsumerSecret())));
+                }
+                int count = preparedStatement.executeUpdate();
+                if (log.isDebugEnabled()) {
+                    log.debug("No. of records updated for updating consumer application. : " + count);
+                }
+            }
+        }
+    }
+
+    private void setClientSecret(String clientSecretFromDB, OAuthAppDO oauthApp,
+            List<ConsumerSecrets> consumerSecretsList) throws IdentityOAuth2Exception {
+
+        if (OAuth2Util.checkOAEPEncryptionEnabled()) {
+            String clientSecret = persistenceProcessor.getPreprocessedClientSecret(clientSecretFromDB);
+            oauthApp.setOauthConsumerSecret(clientSecret);
+            if (!OAuth2Util.isStartWithOaepPrefix(clientSecretFromDB)) {
+                consumerSecretsList.add(new ConsumerSecrets(clientSecret, clientSecretFromDB));
+            }
+        } else {
+            oauthApp.setOauthConsumerSecret(persistenceProcessor.getPreprocessedClientSecret(clientSecretFromDB));
+        }
+    }
+
+    /**
+     * Inner class to hold client secret and encrypted client secret (using old RSA)
+     */
+    private class ConsumerSecrets {
+
+        String decryptedClientSecret;
+        String oldEncryptedClientSecret;
+
+        ConsumerSecrets(String clientSecret, String encryptedClientSecret) {
+            this.decryptedClientSecret = clientSecret;
+            this.oldEncryptedClientSecret = encryptedClientSecret;
+        }
+
     }
 
 }

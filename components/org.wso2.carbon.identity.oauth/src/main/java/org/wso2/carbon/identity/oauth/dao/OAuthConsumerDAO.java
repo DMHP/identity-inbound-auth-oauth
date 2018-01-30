@@ -29,11 +29,9 @@ import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.identity.oauth.tokenprocessor.PlainTextPersistenceProcessor;
 import org.wso2.carbon.identity.oauth.tokenprocessor.TokenPersistenceProcessor;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
-import org.wso2.carbon.identity.oauth2.internal.OAuth2ServiceComponentHolder;
 import org.wso2.carbon.identity.oauth2.util.OAuth2Util;
 
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -73,7 +71,7 @@ public class OAuthConsumerDAO {
             resultSet = prepStmt.executeQuery();
 
             if (resultSet.next()) {
-                if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
+                if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                     consumerSecret = persistenceProcessor.getPreprocessedClientSecret(resultSet.getString(1));
                     if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
                         updateNewEncryptedClientSecret(connection, consumerSecret, resultSet.getString(1));

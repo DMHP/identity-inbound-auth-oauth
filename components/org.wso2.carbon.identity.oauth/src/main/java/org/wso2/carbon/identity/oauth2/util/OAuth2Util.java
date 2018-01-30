@@ -1817,7 +1817,7 @@ public class OAuth2Util {
      * @return true or false
      * @throws IdentityOAuth2Exception
      */
-    public static boolean checkRsaOaepEncryptionEnabled() throws IdentityOAuth2Exception {
+    public static boolean checkOAEPEncryptionEnabled() throws IdentityOAuth2Exception {
 
         String cipherTransformation = System.getProperty(CIPHER_TRANSFORMATION_SYSTEM_PROPERTY);
         TokenPersistenceProcessor persistenceProcessor = OAuthServerConfiguration.getInstance()
