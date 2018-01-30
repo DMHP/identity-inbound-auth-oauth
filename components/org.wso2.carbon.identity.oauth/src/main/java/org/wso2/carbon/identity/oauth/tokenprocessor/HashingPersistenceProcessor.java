@@ -25,7 +25,7 @@ import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
  * An implementation of <Code>TokenPersistenceProcessor</Code>
  * which is used when storing hashed tokens.
  */
-public class HashingPersistenceProcessor implements TokenPersistenceProcessor{
+public class HashingPersistenceProcessor implements TokenPersistenceProcessor {
 
     @Override
     public String getProcessedClientId(String clientId) throws IdentityOAuth2Exception {
@@ -81,6 +81,7 @@ public class HashingPersistenceProcessor implements TokenPersistenceProcessor{
 
     /**
      * Method to generate hash value
+     *
      * @param plainText
      * @return hashed value
      */
