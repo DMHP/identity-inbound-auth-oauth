@@ -29,7 +29,6 @@ public class OAuth2ServiceComponentHolder {
     private static ApplicationManagementService applicationMgtService;
     private static boolean pkceEnabled = false;
     private static RegistryService registryService;
-    private static boolean isEncryptionDecryptionProcessor = false;
     private OAuth2ServiceComponentHolder(){
 
     }
@@ -66,13 +65,5 @@ public class OAuth2ServiceComponentHolder {
 
     public static void setRegistryService(RegistryService registryService) {
         OAuth2ServiceComponentHolder.registryService = registryService;
-    }
-
-    public static boolean isEncryptionDecryptionProcessor(){
-        return isEncryptionDecryptionProcessor;
-    }
-
-    public static void setEncryptionDecryptionProcessor(boolean isEncryptionDecryptionProcessor){
-        OAuth2ServiceComponentHolder.isEncryptionDecryptionProcessor = isEncryptionDecryptionProcessor;
     }
 }
