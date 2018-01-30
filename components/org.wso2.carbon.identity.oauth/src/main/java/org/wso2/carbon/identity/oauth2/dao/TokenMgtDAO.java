@@ -97,7 +97,6 @@ public class TokenMgtDAO {
 
     private static final String IDN_OAUTH2_AUTHORIZATION_CODE = "IDN_OAUTH2_AUTHORIZATION_CODE";
 
-    private static final String CIPHER_TRANSFORMATION_SYSTEM_PROPERTY = "org.wso2.CipherTransformation";
     static {
 
         final Log log = LogFactory.getLog(TokenMgtDAO.class);
@@ -277,10 +276,10 @@ public class TokenMgtDAO {
         PreparedStatement insertTokenPrepStmt = null;
         PreparedStatement addScopePrepStmt = null;
 
-        String sql = OAuth2Util
-                .getTokenPartitionedSqlByUserStore(SQLQueries.INSERT_OAUTH2_ACCESS_TOKEN, userStoreDomain);
-        String sqlAddScopes = OAuth2Util
-                .getTokenPartitionedSqlByUserStore(SQLQueries.INSERT_OAUTH2_TOKEN_SCOPE, userStoreDomain);
+        String sql = OAuth2Util.getTokenPartitionedSqlByUserStore(SQLQueries.INSERT_OAUTH2_ACCESS_TOKEN,
+                userStoreDomain);
+        String sqlAddScopes = OAuth2Util.getTokenPartitionedSqlByUserStore(SQLQueries.INSERT_OAUTH2_TOKEN_SCOPE,
+                userStoreDomain);
 
         try {
             if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
@@ -929,6 +928,7 @@ public class TokenMgtDAO {
         String authCodeStoreTable = OAuthConstants.AUTHORIZATION_CODE_STORE_TABLE;
         Connection connection = IdentityDatabaseUtil.getDBConnection();
         PreparedStatement prepStmt = null;
+        PreparedStatement preparedStatement = null;
         try {
             String sqlQuery = SQLQueries.UPDATE_AUTHORIZATION_CODE_STATE.replace(IDN_OAUTH2_AUTHORIZATION_CODE,
                     authCodeStoreTable);
@@ -947,7 +947,6 @@ public class TokenMgtDAO {
             if (count == 0) {
                 if (OAuth2Util.checkRsaOaepEncryptionEnabled() && isRsaEncryptedAuthorizationCodeAvailable(connection,
                         authzCode)) {
-                    PreparedStatement preparedStatement = null;
                     preparedStatement = connection.prepareStatement(SQLQueries.UPDATE_AUTHORIZATION_CODE_STATE
                             .replace(IDN_OAUTH2_AUTHORIZATION_CODE, authCodeStoreTable));
                     preparedStatement.setString(1, newState);
@@ -963,6 +962,7 @@ public class TokenMgtDAO {
             throw new IdentityOAuth2Exception("Error occurred while updating the state of Authorization Code : " +
                     authzCode.toString(), e);
         } finally {
+            IdentityDatabaseUtil.closeStatement(preparedStatement);
             IdentityDatabaseUtil.closeAllConnections(connection, null, prepStmt);
         }
     }
@@ -1017,7 +1017,9 @@ public class TokenMgtDAO {
         RefreshTokenValidationDataDO validationDataDO = new RefreshTokenValidationDataDO();
         Connection connection = IdentityDatabaseUtil.getDBConnection();
         PreparedStatement prepStmt = null;
+        PreparedStatement preparedStatement = null;
         ResultSet resultSet = null;
+        ResultSet resultSet1 = null;
         String sqlWithHash = null,sql = null;
         boolean isResultsetAvaiable = false;
 
@@ -1052,7 +1054,7 @@ public class TokenMgtDAO {
                 sql = sql.replace("REFRESH_TOKEN = ?", "REFRESH_TOKEN IS NULL");
             }
 
-
+            prepStmt = connection.prepareStatement(sql);
             if (refreshToken != null) {
                 if (OAuth2Util.checkRsaOaepEncryptionEnabled()) {
                     prepStmt = connection.prepareStatement(sqlWithHash);
@@ -1110,8 +1112,7 @@ public class TokenMgtDAO {
             }
             if(!isResultsetAvaiable){
                 if(OAuth2Util.checkRsaOaepEncryptionEnabled() && isRsaEncryptedRefreshTokenAvailable(connection,refreshToken)){
-                    PreparedStatement preparedStatement = null;
-                    ResultSet resultSet1;
+                    
                     preparedStatement = connection.prepareStatement(sql);
                     preparedStatement.setString(1, persistenceProcessor.getProcessedClientId(consumerKey));
                     preparedStatement.setString(2, OAuth2Util.encryptWithRSA(refreshToken));
@@ -1163,6 +1164,7 @@ public class TokenMgtDAO {
         } catch (SQLException e) {
             throw new IdentityOAuth2Exception("Error when validating a refresh token", e);
         } finally {
+            IdentityDatabaseUtil.closeAllConnections(null,resultSet1,preparedStatement);
             IdentityDatabaseUtil.closeAllConnections(connection, resultSet, prepStmt);
         }
 
@@ -1181,6 +1183,8 @@ public class TokenMgtDAO {
         Connection connection = IdentityDatabaseUtil.getDBConnection();
         PreparedStatement prepStmt = null;
         ResultSet resultSet = null;
+        PreparedStatement preparedStatement = null;
+        ResultSet resultSet1 = null;
         boolean isResultsetAvaiable = false;
 
         try {
@@ -1256,8 +1260,7 @@ public class TokenMgtDAO {
             if(!isResultsetAvaiable){
                 if(OAuth2Util.checkRsaOaepEncryptionEnabled() && isRsaEncryptedAccessTokenAvailable(connection,
                         accessTokenIdentifier)){
-                    PreparedStatement preparedStatement = null;
-                    ResultSet resultSet1;
+                    
                     if (includeExpired) {
                             sql = SQLQueries.RETRIEVE_ACTIVE_EXPIRED_ACCESS_TOKEN;
                     } else {
@@ -1319,6 +1322,7 @@ public class TokenMgtDAO {
         } catch (SQLException e) {
             throw new IdentityOAuth2Exception("Error when retrieving Access Token" + e);
         } finally {
+            IdentityDatabaseUtil.closeAllConnections(null,resultSet1,preparedStatement);
             IdentityDatabaseUtil.closeAllConnections(connection, resultSet, prepStmt);
         }
 
@@ -1382,6 +1386,7 @@ public class TokenMgtDAO {
         String accessTokenStoreTable = OAuthConstants.ACCESS_TOKEN_STORE_TABLE;
         Connection connection = IdentityDatabaseUtil.getDBConnection();
         PreparedStatement ps = null;
+        PreparedStatement preparedStatement = null;
         if (tokens.length > 1) {
             try {
                 connection.setAutoCommit(false);
@@ -1435,7 +1440,7 @@ public class TokenMgtDAO {
                 if(count == 0){
                     if(OAuth2Util.checkRsaOaepEncryptionEnabled() && isRsaEncryptedAccessTokenAvailable
                             (connection,tokens[0])){
-                        PreparedStatement preparedStatement = null;
+
                         preparedStatement = connection.prepareStatement(SQLQueries.REVOKE_ACCESS_TOKEN.replace(IDN_OAUTH2_ACCESS_TOKEN, accessTokenStoreTable));
                         preparedStatement.setString(1, OAuthConstants.TokenStates.TOKEN_STATE_REVOKED);
                         preparedStatement.setString(2, UUID.randomUUID().toString());
@@ -1449,6 +1454,7 @@ public class TokenMgtDAO {
                 throw new IdentityOAuth2Exception("Error occurred while revoking Access Token : " +
                         Arrays.toString(tokens), e);
             } finally {
+                IdentityDatabaseUtil.closeStatement(preparedStatement);
                 IdentityDatabaseUtil.closeAllConnections(connection, null, ps);
             }
         }
@@ -1458,6 +1464,7 @@ public class TokenMgtDAO {
 
         Connection connection = IdentityDatabaseUtil.getDBConnection();
         PreparedStatement ps = null;
+        PreparedStatement preparedStatement = null;
         try {
             connection.setAutoCommit(false);
 
@@ -1480,7 +1487,7 @@ public class TokenMgtDAO {
                 if(count == 0){
                     if(OAuth2Util.checkRsaOaepEncryptionEnabled() && isRsaEncryptedAccessTokenAvailable
                             (connection,token)){
-                        PreparedStatement preparedStatement = null;
+
                         preparedStatement = connection.prepareStatement(OAuth2Util.getTokenPartitionedSqlByToken(SQLQueries.REVOKE_ACCESS_TOKEN, token));
                         preparedStatement.setString(1, OAuthConstants.TokenStates.TOKEN_STATE_REVOKED);
                         preparedStatement.setString(2, UUID.randomUUID().toString());
@@ -1500,6 +1507,7 @@ public class TokenMgtDAO {
             throw new IdentityOAuth2Exception("Error occurred while revoking Access Token : " +
                     Arrays.toString(tokens), e);
         } finally {
+            IdentityDatabaseUtil.closeStatement(preparedStatement);
             IdentityDatabaseUtil.closeAllConnections(connection, null, ps);
         }
     }
@@ -2758,6 +2766,8 @@ public class TokenMgtDAO {
         PreparedStatement revokeActiveTokensStatement = null;
         PreparedStatement deactiveActiveCodesStatement = null;
         String action;
+        PreparedStatement preparedStatement = null;
+
         if (properties.containsKey(OAuthConstants.ACTION_PROPERTY_KEY)) {
             action = properties.getProperty(OAuthConstants.ACTION_PROPERTY_KEY);
         } else {
@@ -2851,7 +2861,7 @@ public class TokenMgtDAO {
                         if(count == 0){
                             if(OAuth2Util.checkRsaOaepEncryptionEnabled() && isRsaEncryptedAuthorizationCodeAvailable
                                     (connection,authzCode)){
-                                PreparedStatement preparedStatement = null;
+
                                 preparedStatement = connection.prepareStatement(SQLQueries.UPDATE_AUTHORIZATION_CODE_STATE
                                         .replace(IDN_OAUTH2_AUTHORIZATION_CODE, authCodeStoreTable));
                                 preparedStatement.setString(1, OAuthConstants.AuthorizationCodeState.REVOKED);
@@ -2872,6 +2882,7 @@ public class TokenMgtDAO {
         } finally {
             IdentityDatabaseUtil.closeStatement(updateStateStatement);
             IdentityDatabaseUtil.closeStatement(revokeActiveTokensStatement);
+            IdentityDatabaseUtil.closeStatement(preparedStatement);
             IdentityDatabaseUtil.closeAllConnections(connection, null, deactiveActiveCodesStatement);
         }
     }
@@ -3265,14 +3276,19 @@ public class TokenMgtDAO {
      * @throws IdentityOAuth2Exception
      */
     private void updateNewEncryptedRefreshToken(Connection connection, String decryptedrefreshToken,
-            String oldEncryptedToken) throws SQLException, IdentityOAuth2Exception {
+            String oldEncryptedToken) throws IdentityOAuth2Exception {
         PreparedStatement prepStmt = null;
-        prepStmt = connection.prepareStatement(SQLQueries.UPDATE_REFRESH_TOKEN);
-        prepStmt.setString(1,
-                persistenceProcessor.getProcessedRefreshToken(decryptedrefreshToken));
-        prepStmt.setString(2, OAuth2Util.hashRefreshToken(decryptedrefreshToken));
-        prepStmt.setString(3, oldEncryptedToken);
-        prepStmt.executeUpdate();
+        try {
+            prepStmt = connection.prepareStatement(SQLQueries.UPDATE_REFRESH_TOKEN);
+            prepStmt.setString(1, persistenceProcessor.getProcessedRefreshToken(decryptedrefreshToken));
+            prepStmt.setString(2, OAuth2Util.hashRefreshToken(decryptedrefreshToken));
+            prepStmt.setString(3, oldEncryptedToken);
+            prepStmt.executeUpdate();
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception("Error while updating new encrypted refresh token ", e);
+        } finally {
+            IdentityDatabaseUtil.closeStatement(prepStmt);
+        }
 
     }
 
@@ -3285,24 +3301,37 @@ public class TokenMgtDAO {
      * @throws IdentityOAuth2Exception
      */
     private void updateNewEncryptedToken(Connection connection, String decryptedAccessTokenIdentifier,
-            String oldEncryptedToken) throws SQLException, IdentityOAuth2Exception {
+            String oldEncryptedToken) throws IdentityOAuth2Exception {
         PreparedStatement prepStmt = null;
-        prepStmt = connection.prepareStatement(SQLQueries.UPDATE_ACCESS_TOKEN);
-        prepStmt.setString(1, persistenceProcessor.getProcessedAccessTokenIdentifier(decryptedAccessTokenIdentifier));
-        prepStmt.setString(2, OAuth2Util.hashAccessTokenIdentifier(decryptedAccessTokenIdentifier));
-        prepStmt.setString(3, oldEncryptedToken);
-        prepStmt.executeUpdate();
+        try {
+            prepStmt = connection.prepareStatement(SQLQueries.UPDATE_ACCESS_TOKEN);
+            prepStmt.setString(1,
+                    persistenceProcessor.getProcessedAccessTokenIdentifier(decryptedAccessTokenIdentifier));
+            prepStmt.setString(2, OAuth2Util.hashAccessTokenIdentifier(decryptedAccessTokenIdentifier));
+            prepStmt.setString(3, oldEncryptedToken);
+            prepStmt.executeUpdate();
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception("Error while updating new encrypted access token", e);
+        } finally {
+            IdentityDatabaseUtil.closeStatement(prepStmt);
+        }
 
     }
 
     private void updateNewEncryptedAuthzCode(Connection connection, String decryptedAuthzCode,
-            String oldEncryptedAuthzCode) throws SQLException, IdentityOAuth2Exception {
+            String oldEncryptedAuthzCode) throws IdentityOAuth2Exception {
         PreparedStatement prepStmt = null;
-        prepStmt = connection.prepareStatement(SQLQueries.UPDATE_AUTHORIZATION_CODE);
-        prepStmt.setString(1, persistenceProcessor.getProcessedAuthzCode(decryptedAuthzCode));
-        prepStmt.setString(2, OAuth2Util.hashAuthzCode(decryptedAuthzCode));
-        prepStmt.setString(3, oldEncryptedAuthzCode);
-        prepStmt.executeUpdate();
+        try {
+            prepStmt = connection.prepareStatement(SQLQueries.UPDATE_AUTHORIZATION_CODE);
+            prepStmt.setString(1, persistenceProcessor.getProcessedAuthzCode(decryptedAuthzCode));
+            prepStmt.setString(2, OAuth2Util.hashAuthzCode(decryptedAuthzCode));
+            prepStmt.setString(3, oldEncryptedAuthzCode);
+            prepStmt.executeUpdate();
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception("Error while updating new encrypted authorization code ", e);
+        } finally {
+            IdentityDatabaseUtil.closeStatement(prepStmt);
+        }
 
     }
 
@@ -3315,15 +3344,23 @@ public class TokenMgtDAO {
      * @throws IdentityOAuth2Exception
      */
     private boolean isRsaEncryptedAuthorizationCodeAvailable(Connection connection, String authorizationKey)
-            throws SQLException, IdentityOAuth2Exception {
+            throws IdentityOAuth2Exception {
         PreparedStatement prepStmt = null;
-        prepStmt = connection.prepareStatement(SQLQueries.CHECK_AUTHORIZATION_CODE);
-        prepStmt.setString(1,OAuth2Util.encryptWithRSA(authorizationKey));
-        ResultSet resultSet = prepStmt.executeQuery();
-        if(resultSet.next()){
-            return true;
-        }else{
-            return false;
+        ResultSet resultSet = null;
+        try {
+            prepStmt = connection.prepareStatement(SQLQueries.CHECK_AUTHORIZATION_CODE);
+
+            prepStmt.setString(1, OAuth2Util.encryptWithRSA(authorizationKey));
+            resultSet = prepStmt.executeQuery();
+            if (resultSet.next()) {
+                return true;
+            } else {
+                return false;
+            }
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception("Error while checking RSA encrypted old authorization code: ", e);
+        } finally {
+            IdentityDatabaseUtil.closeAllConnections(null, resultSet, prepStmt);
         }
     }
 
@@ -3336,36 +3373,50 @@ public class TokenMgtDAO {
      * @throws IdentityOAuth2Exception
      */
     private boolean isRsaEncryptedRefreshTokenAvailable(Connection connection, String refreshToken)
-            throws SQLException, IdentityOAuth2Exception {
+            throws IdentityOAuth2Exception {
         PreparedStatement prepStmt = null;
-        prepStmt = connection.prepareStatement(SQLQueries.CHECK_REFRESH_TOKEN);
-        prepStmt.setString(1,OAuth2Util.encryptWithRSA(refreshToken));
-        ResultSet resultSet = prepStmt.executeQuery();
-        if(resultSet.next()){
-            return true;
-        }else{
-            return false;
+        ResultSet resultSet = null;
+        try {
+            prepStmt = connection.prepareStatement(SQLQueries.CHECK_REFRESH_TOKEN);
+            prepStmt.setString(1, OAuth2Util.encryptWithRSA(refreshToken));
+            resultSet = prepStmt.executeQuery();
+            if (resultSet.next()) {
+                return true;
+            } else {
+                return false;
+            }
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception("Error while checking RSA encrypted old refresh token: ", e);
+        } finally {
+            IdentityDatabaseUtil.closeAllConnections(null, resultSet, prepStmt);
         }
     }
 
     /**
      * Check wether access token encrypted with old RSA algorithm is available
      * @param connection
-     * @param accessTOken
+     * @param accessToken
      * @return
      * @throws SQLException
      * @throws IdentityOAuth2Exception
      */
-    private boolean isRsaEncryptedAccessTokenAvailable(Connection connection, String accessTOken)
-            throws SQLException, IdentityOAuth2Exception {
+    private boolean isRsaEncryptedAccessTokenAvailable(Connection connection, String accessToken)
+            throws IdentityOAuth2Exception {
         PreparedStatement prepStmt = null;
-        prepStmt = connection.prepareStatement(SQLQueries.CHECK_ACCESS_TOKEN);
-        prepStmt.setString(1,OAuth2Util.encryptWithRSA(accessTOken));
-        ResultSet resultSet = prepStmt.executeQuery();
-        if(resultSet.next()){
-            return true;
-        }else{
-            return false;
+        ResultSet resultSet = null;
+        try {
+            prepStmt = connection.prepareStatement(SQLQueries.CHECK_ACCESS_TOKEN);
+            prepStmt.setString(1, OAuth2Util.encryptWithRSA(accessToken));
+            resultSet = prepStmt.executeQuery();
+            if (resultSet.next()) {
+                return true;
+            } else {
+                return false;
+            }
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception("Error while checking RSA encrypted old access token: " + accessToken, e);
+        } finally {
+            IdentityDatabaseUtil.closeAllConnections(null, resultSet, prepStmt);
         }
     }
 
