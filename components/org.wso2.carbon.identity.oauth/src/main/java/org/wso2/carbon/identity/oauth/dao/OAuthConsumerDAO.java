@@ -35,6 +35,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class OAuthConsumerDAO {
 
@@ -64,7 +66,7 @@ public class OAuthConsumerDAO {
         Connection connection = IdentityDatabaseUtil.getDBConnection();
         PreparedStatement prepStmt = null;
         ResultSet resultSet = null;
-
+        List<OauthConsumerDAOConsumerSecrets> consumerSecretsList = new ArrayList<>();
         try {
             prepStmt = connection.prepareStatement(SQLQueries.OAuthConsumerDAOSQLQueries.GET_CONSUMER_SECRET);
             prepStmt.setString(1, persistenceProcessor.getProcessedClientId(consumerKey));
@@ -74,7 +76,8 @@ public class OAuthConsumerDAO {
                 if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                     consumerSecret = persistenceProcessor.getPreprocessedClientSecret(resultSet.getString(1));
                     if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
-                        updateNewEncryptedClientSecret(connection, consumerSecret, resultSet.getString(1));
+                        consumerSecretsList
+                                .add(new OauthConsumerDAOConsumerSecrets(consumerSecret, resultSet.getString(1)));
                     }
                 } else {
                     consumerSecret = persistenceProcessor.getPreprocessedClientSecret(resultSet.getString(1));
@@ -85,6 +88,9 @@ public class OAuthConsumerDAO {
                 }
             }
             connection.commit();
+            if (OAuth2Util.checkOAEPEncryptionEnabled()) {
+                updateListOfClientSecrets(consumerSecretsList);
+            }
         } catch (SQLException e) {
             throw new IdentityOAuthAdminException("Error when reading the consumer secret for consumer key : " +
                     consumerKey, e);
@@ -442,20 +448,56 @@ public class OAuthConsumerDAO {
     /**
      * Method to encrypt the client secret which was encrypted with old RSA algorithm  with new RSA+OAEP algorithm.
      * This will also store a hashed value of the client secret.
-     * @param connection
      * @param decryptedClientSecret
      * @param oldEncryptedClientSecret
      * @throws SQLException
      * @throws IdentityOAuth2Exception
      */
-    private void updateNewEncryptedClientSecret(Connection connection, String decryptedClientSecret,
+    private void updateNewEncryptedClientSecret(PreparedStatement prepStmt, String decryptedClientSecret,
             String oldEncryptedClientSecret) throws SQLException, IdentityOAuth2Exception {
-        PreparedStatement prepStmt = null;
-        prepStmt = connection.prepareStatement(SQLQueries.OAuthConsumerDAOSQLQueries.UPDATE_CONSUMER_SECRET);
+
         prepStmt.setString(1, persistenceProcessor.getProcessedAccessTokenIdentifier(decryptedClientSecret));
         prepStmt.setString(2, OAuth2Util.hashClientSecret(decryptedClientSecret));
         prepStmt.setString(3, oldEncryptedClientSecret);
-        prepStmt.executeUpdate();
+        prepStmt.addBatch();
+
+    }
+
+    private void updateListOfClientSecrets(List<OauthConsumerDAOConsumerSecrets> consumerSecretsList) throws IdentityOAuth2Exception {
+
+        if (consumerSecretsList != null) {
+            Connection connection = IdentityDatabaseUtil.getDBConnection();
+            PreparedStatement preparedStatement = null;
+            try {
+                preparedStatement = connection
+                        .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_SECRET);
+                for (OauthConsumerDAOConsumerSecrets consumerSecrets : consumerSecretsList) {
+                    updateNewEncryptedClientSecret(preparedStatement, consumerSecrets.decryptedClientSecret,
+                            consumerSecrets.oldEncryptedClientSecret);
+                }
+                preparedStatement.executeBatch();
+                connection.commit();
+            } catch (SQLException e) {
+                throw new IdentityOAuth2Exception(
+                        "Error while updating client secrets in to OAEP encryption " + "algorithm ", e);
+            } finally {
+                IdentityDatabaseUtil.closeAllConnections(connection, null, preparedStatement);
+            }
+        }
+    }
+
+    /**
+     * Inner class to hold client secret and encrypted client secret (using old RSA)
+     */
+    private class OauthConsumerDAOConsumerSecrets {
+
+        String decryptedClientSecret;
+        String oldEncryptedClientSecret;
+
+        OauthConsumerDAOConsumerSecrets(String clientSecret, String encryptedClientSecret) {
+            this.decryptedClientSecret = clientSecret;
+            this.oldEncryptedClientSecret = encryptedClientSecret;
+        }
 
     }
 
