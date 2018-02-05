@@ -1839,7 +1839,7 @@ public class OAuth2Util {
             md = connection.getMetaData();
             rs = md.getColumns(null, null, tableName, columnName);
             if (rs.next()) {
-                isColumnAvailable = rs.next();
+                isColumnAvailable = true;
             } else {
                 rs = md.getColumns(null, null, tableName.toLowerCase(), columnName.toLowerCase());
                 isColumnAvailable = rs.next();
