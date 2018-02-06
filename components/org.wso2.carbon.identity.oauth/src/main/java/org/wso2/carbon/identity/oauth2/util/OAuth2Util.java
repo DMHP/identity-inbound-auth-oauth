@@ -40,13 +40,11 @@ import org.wso2.carbon.core.util.CryptoUtil;
 import org.wso2.carbon.core.util.KeyStoreManager;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
 import org.wso2.carbon.identity.application.common.IdentityApplicationManagementException;
-import org.wso2.carbon.identity.application.common.model.InboundAuthenticationRequestConfig;
-import org.wso2.carbon.identity.application.common.model.Property;
 import org.wso2.carbon.identity.application.common.model.ServiceProvider;
-import org.wso2.carbon.identity.application.common.util.IdentityApplicationConstants;
 import org.wso2.carbon.identity.application.mgt.ApplicationManagementService;
 import org.wso2.carbon.identity.base.IdentityConstants;
 import org.wso2.carbon.identity.base.IdentityException;
+import org.wso2.carbon.identity.base.IdentityRuntimeException;
 import org.wso2.carbon.identity.core.util.IdentityDatabaseUtil;
 import org.wso2.carbon.identity.core.util.IdentityIOStreamUtils;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
@@ -69,6 +67,7 @@ import org.wso2.carbon.identity.oauth.tokenprocessor.TokenPersistenceProcessor;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 import org.wso2.carbon.identity.oauth2.authz.OAuthAuthzReqMessageContext;
 import org.wso2.carbon.identity.oauth2.config.SpOAuth2ExpiryTimeConfiguration;
+import org.wso2.carbon.identity.oauth2.dao.SQLQueries;
 import org.wso2.carbon.identity.oauth2.dao.TokenMgtDAO;
 import org.wso2.carbon.identity.oauth2.internal.OAuth2ServiceComponentHolder;
 import org.wso2.carbon.identity.oauth2.model.AccessTokenDO;
@@ -102,6 +101,7 @@ import java.security.cert.CertificateException;
 import java.security.interfaces.RSAPublicKey;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -1827,31 +1827,146 @@ public class OAuth2Util {
     }
 
     /**
-     * Method to check if a new column is available
-     * @throws SQLException
+     * Method to check whether columns with name ACCESS_TOKEN_HASH and REFRESH_TOKEN_HASH is created.
+     * @return true if columns are available else return false
+     * @throws IdentityOAuth2Exception
      */
-    public static boolean checkColumn(String tableName, String columnName) throws IdentityOAuth2Exception {
-        boolean isColumnAvailable = false;
+    public static boolean checkTokenHashColumn() throws IdentityOAuth2Exception {
+
+        ResultSet resultSet = null;
+        PreparedStatement preparedStatement = null;
         Connection connection = IdentityDatabaseUtil.getDBConnection();
-        DatabaseMetaData md;
-        ResultSet rs = null;
-        try {
-            md = connection.getMetaData();
-            rs = md.getColumns(null, null, tableName, columnName);
-            if (rs.next()) {
-                isColumnAvailable = true;
-            } else {
-                rs = md.getColumns(null, null, tableName.toLowerCase(), columnName.toLowerCase());
-                isColumnAvailable = rs.next();
+        if (connection != null) {
+            try {
+                String sql;
+                if (connection.getMetaData().getDriverName().contains("MySQL") || connection.getMetaData()
+                        .getDriverName().contains("H2")) {
+                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_HASH_MYSQL;
+                } else if (connection.getMetaData().getDatabaseProductName().contains("DB2")) {
+                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_HASH_DB2SQL;
+                } else if (connection.getMetaData().getDriverName().contains("MS SQL") || connection.getMetaData()
+                        .getDriverName().contains("Microsoft")) {
+                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_HASH_MSSQL;
+                } else if (connection.getMetaData().getDriverName().contains("PostgreSQL")) {
+                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_HASH_MYSQL;
+                } else if (connection.getMetaData().getDriverName().contains("Informix")) {
+                    // Driver name = "IBM Informix JDBC Driver for IBM Informix Dynamic Server"
+                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_HASH_INFORMIX;
+                } else {
+                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_HASH_ORACLE;
+                }
+                preparedStatement = connection.prepareStatement(sql);
+                resultSet = preparedStatement.executeQuery();
+                if (resultSet != null) {
+                    //following statement will throw SQLException if the column is not found
+                    resultSet.findColumn(ACCESS_TOKEN_HASH);
+                    resultSet.findColumn(REFRESH_TOKEN_HASH);
+                    //if we are here then the column exists, so token hashing is supported by the database.
+                    return true;
+                }
+            } catch (SQLException e) {
+                throw new IdentityOAuth2Exception(
+                        "Error occurred while checking for columns: " + ACCESS_TOKEN_HASH + " and "
+                                + REFRESH_TOKEN_HASH, e);
+            } finally {
+                IdentityDatabaseUtil.closeAllConnections(connection, resultSet, preparedStatement);
             }
-            connection.commit();
-            return isColumnAvailable;
-        } catch (SQLException e) {
-            throw new IdentityOAuth2Exception(
-                    "Error occurred while checking for column: " + columnName + "and table: " + tableName, e);
-        } finally {
-            IdentityDatabaseUtil.closeAllConnections(connection, rs, null);
         }
+        return false;
+    }
+
+    /**
+     * Method to check whether a column with name AUTHORIZATION_CODE_HASH is created.
+     * @return true if column is available else return false
+     * @throws IdentityOAuth2Exception
+     */
+    public static boolean checkAuthzCodeHashColumn() throws IdentityOAuth2Exception {
+
+        ResultSet resultSet = null;
+        PreparedStatement preparedStatement = null;
+        Connection connection = IdentityDatabaseUtil.getDBConnection();
+        if (connection != null) {
+            try {
+                String sql;
+                if (connection.getMetaData().getDriverName().contains("MySQL") || connection.getMetaData()
+                        .getDriverName().contains("H2")) {
+                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_HASH_MYSQL;
+                } else if (connection.getMetaData().getDatabaseProductName().contains("DB2")) {
+                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_HASH_DB2SQL;
+                } else if (connection.getMetaData().getDriverName().contains("MS SQL") || connection.getMetaData()
+                        .getDriverName().contains("Microsoft")) {
+                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_HASH_MSSQL;
+                } else if (connection.getMetaData().getDriverName().contains("PostgreSQL")) {
+                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_HASH_MYSQL;
+                } else if (connection.getMetaData().getDriverName().contains("Informix")) {
+                    // Driver name = "IBM Informix JDBC Driver for IBM Informix Dynamic Server"
+                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_HASH_INFORMIX;
+                } else {
+                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_HASH_ORACLE;
+                }
+                preparedStatement = connection.prepareStatement(sql);
+                resultSet = preparedStatement.executeQuery();
+                if (resultSet != null) {
+                    //following statement will throw SQLException if the column is not found
+                    resultSet.findColumn(AUTHORIZATION_CODE_HASH);
+                    //if we are here then the column exists, so authorization code hashing is supported by the database.
+                    return true;
+                }
+            } catch (SQLException e) {
+                throw new IdentityOAuth2Exception(
+                        "Error occurred while checking for columns: " + AUTHORIZATION_CODE_HASH, e);
+            } finally {
+                IdentityDatabaseUtil.closeAllConnections(connection, resultSet, preparedStatement);
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Method to check whether a column with name CONSUMER_SECRET_HASH is created.
+     * @return true if column is available else return false
+     * @throws IdentityOAuth2Exception
+     */
+    public static boolean checkConsumerSecretHashColumn() throws IdentityOAuth2Exception {
+
+        ResultSet resultSet = null;
+        PreparedStatement preparedStatement = null;
+        Connection connection = IdentityDatabaseUtil.getDBConnection();
+        if (connection != null) {
+            try {
+                String sql;
+                if (connection.getMetaData().getDriverName().contains("MySQL") || connection.getMetaData()
+                        .getDriverName().contains("H2")) {
+                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_HASH_MYSQL;
+                } else if (connection.getMetaData().getDatabaseProductName().contains("DB2")) {
+                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_HASH_DB2SQL;
+                } else if (connection.getMetaData().getDriverName().contains("MS SQL") || connection.getMetaData()
+                        .getDriverName().contains("Microsoft")) {
+                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_HASH_MSSQL;
+                } else if (connection.getMetaData().getDriverName().contains("PostgreSQL")) {
+                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_HASH_MYSQL;
+                } else if (connection.getMetaData().getDriverName().contains("Informix")) {
+                    // Driver name = "IBM Informix JDBC Driver for IBM Informix Dynamic Server"
+                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_HASH_INFORMIX;
+                } else {
+                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_HASH_ORACLE;
+                }
+                preparedStatement = connection.prepareStatement(sql);
+                resultSet = preparedStatement.executeQuery();
+                if (resultSet != null) {
+                    //following statement will throw SQLException if the column is not found
+                    resultSet.findColumn(CONSUMER_SECRET_HASH);
+                    //if we are here then the column exists, so consumer secret hashing is supported by the database.
+                    return true;
+                }
+            } catch (SQLException e) {
+                throw new IdentityOAuth2Exception("Error occurred while checking for columns: " + CONSUMER_SECRET_HASH,
+                        e);
+            } finally {
+                IdentityDatabaseUtil.closeAllConnections(connection, resultSet, preparedStatement);
+            }
+        }
+        return false;
     }
 
     /**
@@ -1862,8 +1977,8 @@ public class OAuth2Util {
      */
     public static boolean checkHashColumns() throws IdentityOAuth2Exception {
 
-        return isAccessTokenHashColumnCreated() && isAuthzCodeHashColumnCreated() && isConsumerSecretHashColumnCreated()
-                && isRefreshTokenHashColumnCreated();
+        return isAccessTokenHashColumnCreated() && isAuthzCodeHashColumnCreated()
+                && isConsumerSecretHashColumnCreated();
     }
 
     /**
@@ -1873,25 +1988,10 @@ public class OAuth2Util {
      */
     private static boolean isAccessTokenHashColumnCreated() throws IdentityOAuth2Exception {
 
-        if (OAuth2Util.checkColumn(IDN_OAUTH2_ACCESS_TOKEN, ACCESS_TOKEN_HASH)) {
+        if (OAuth2Util.checkTokenHashColumn()) {
             return true;
         } else {
             log.error("Required column" + ACCESS_TOKEN_HASH + " missing");
-            return false;
-        }
-    }
-
-    /**
-     * Method to check if a column to store refresh token hash is available
-     * @return
-     * @throws IdentityOAuth2Exception
-     */
-    private static boolean isRefreshTokenHashColumnCreated() throws IdentityOAuth2Exception {
-
-        if (OAuth2Util.checkColumn(IDN_OAUTH2_ACCESS_TOKEN, REFRESH_TOKEN_HASH)) {
-            return true;
-        } else {
-            log.error("Required column" + REFRESH_TOKEN_HASH + " missing");
             return false;
         }
     }
@@ -1903,7 +2003,7 @@ public class OAuth2Util {
      */
     private static boolean isAuthzCodeHashColumnCreated() throws IdentityOAuth2Exception {
 
-        if (OAuth2Util.checkColumn(IDN_OAUTH2_AUTHORIZATION_CODE, AUTHORIZATION_CODE_HASH)) {
+        if (OAuth2Util.checkAuthzCodeHashColumn()) {
             return true;
         } else {
             log.error("Required column" + AUTHORIZATION_CODE_HASH + " missing");
@@ -1918,7 +2018,7 @@ public class OAuth2Util {
      */
     private static boolean isConsumerSecretHashColumnCreated() throws IdentityOAuth2Exception {
 
-        if (OAuth2Util.checkColumn(IDN_OAUTH_CONSUMER_APPS, CONSUMER_SECRET_HASH)) {
+        if (OAuth2Util.checkConsumerSecretHashColumn()) {
             return true;
         } else {
             log.error("Required column" + CONSUMER_SECRET_HASH + " missing");
