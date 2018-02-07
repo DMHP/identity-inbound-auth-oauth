@@ -29,31 +29,37 @@ public class HashingPersistenceProcessor implements TokenPersistenceProcessor {
 
     @Override
     public String getProcessedClientId(String clientId) throws IdentityOAuth2Exception {
+
         return clientId;
     }
 
     @Override
     public String getPreprocessedClientId(String processedClientId) throws IdentityOAuth2Exception {
+
         return processedClientId;
     }
 
     @Override
     public String getProcessedClientSecret(String clientSecret) throws IdentityOAuth2Exception {
+
         return hash(clientSecret);
     }
 
     @Override
     public String getPreprocessedClientSecret(String processedClientSecret) throws IdentityOAuth2Exception {
+
         throw new UnsupportedOperationException("Invalid operation on hashed client secret");
     }
 
     @Override
     public String getProcessedAuthzCode(String authzCode) throws IdentityOAuth2Exception {
+
         return hash(authzCode);
     }
 
     @Override
     public String getPreprocessedAuthzCode(String processedAuthzCode) throws IdentityOAuth2Exception {
+
         throw new UnsupportedOperationException("Invalid operation on hashed authorization code");
     }
 
@@ -66,16 +72,19 @@ public class HashingPersistenceProcessor implements TokenPersistenceProcessor {
     @Override
     public String getPreprocessedAccessTokenIdentifier(String processedAccessTokenIdentifier)
             throws IdentityOAuth2Exception {
+
         throw new UnsupportedOperationException("Invalid operation on hashed access token");
     }
 
     @Override
     public String getProcessedRefreshToken(String refreshToken) throws IdentityOAuth2Exception {
+
         return hash(refreshToken);
     }
 
     @Override
     public String getPreprocessedRefreshToken(String processedRefreshToken) throws IdentityOAuth2Exception {
+
         throw new UnsupportedOperationException("Invalid operation on hashed refresh token");
     }
 

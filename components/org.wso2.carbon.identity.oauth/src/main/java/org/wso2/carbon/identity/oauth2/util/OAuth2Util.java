@@ -44,7 +44,6 @@ import org.wso2.carbon.identity.application.common.model.ServiceProvider;
 import org.wso2.carbon.identity.application.mgt.ApplicationManagementService;
 import org.wso2.carbon.identity.base.IdentityConstants;
 import org.wso2.carbon.identity.base.IdentityException;
-import org.wso2.carbon.identity.base.IdentityRuntimeException;
 import org.wso2.carbon.identity.core.util.IdentityDatabaseUtil;
 import org.wso2.carbon.identity.core.util.IdentityIOStreamUtils;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
@@ -100,7 +99,6 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.interfaces.RSAPublicKey;
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -224,13 +222,12 @@ public class OAuth2Util {
     private static Pattern pkceCodeVerifierPattern = Pattern.compile("[\\w\\-\\._~]+");
     private static Map<Integer, Key> privateKeys = new ConcurrentHashMap<>();
     private static Map<Integer, Certificate> publicCerts = new ConcurrentHashMap<Integer, Certificate>();
+    //system property used when RSA+OAEP dynamic encryption algorithm is enabled
     private static final String CIPHER_TRANSFORMATION_SYSTEM_PROPERTY = "org.wso2.CipherTransformation";
-    private static final String IDN_OAUTH2_ACCESS_TOKEN = "IDN_OAUTH2_ACCESS_TOKEN";
-    private static final String IDN_OAUTH2_AUTHORIZATION_CODE = "IDN_OAUTH2_AUTHORIZATION_CODE";
+    //New columns introduced to store hash values when RSA + OAEP encryption is enabled.
     private static final String ACCESS_TOKEN_HASH = "ACCESS_TOKEN_HASH";
     private static final String REFRESH_TOKEN_HASH = "REFRESH_TOKEN_HASH";
     private static final String AUTHORIZATION_CODE_HASH = "AUTHORIZATION_CODE_HASH";
-    private static final String IDN_OAUTH_CONSUMER_APPS = "IDN_OAUTH_CONSUMER_APPS";
     private static final String CONSUMER_SECRET_HASH = "CONSUMER_SECRET_HASH";
 
     private OAuth2Util() {
@@ -255,45 +252,6 @@ public class OAuth2Util {
         if (log.isDebugEnabled()) {
             log.debug("Added OAuthAuthzReqMessageContext to threadlocal");
         }
-    }
-
-    /**
-     * Method to check whether a encrypted value is encrypted using RSA+OAEP algorithm.
-     * @param processedKey
-     * @return boolean
-     * @throws IdentityOAuth2Exception
-     */
-    public static boolean isStartWithOaepPrefix(String processedKey) throws IdentityOAuth2Exception {
-
-        try {
-            return CryptoUtil.getDefaultCryptoUtil().base64DecodeAndCheckCustomEncryption(processedKey);
-        } catch (CryptoException e) {
-            throw new IdentityOAuth2Exception("Error while checking for custom encryption", e);
-        }
-    }
-
-    public static String hashClientSecret(String clientSecret) throws IdentityOAuth2Exception {
-        TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-        String hashedClientSecret = tokenPersistenceProcessor.getProcessedClientSecret(clientSecret);
-        return hashedClientSecret;
-    }
-
-    public static String hashAuthzCode(String authzCode) throws IdentityOAuth2Exception {
-        TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-        String hashedAuthzCode = tokenPersistenceProcessor.getProcessedAuthzCode(authzCode);
-        return hashedAuthzCode;
-    }
-
-    public static String hashAccessTokenIdentifier(String accessTokenIdentifier) throws IdentityOAuth2Exception {
-        TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-        String hashedAccessTokenIdentifier = tokenPersistenceProcessor.getProcessedAccessTokenIdentifier(accessTokenIdentifier);
-        return hashedAccessTokenIdentifier;
-    }
-
-    public static String hashRefreshToken(String refreshToken) throws IdentityOAuth2Exception {
-        TokenPersistenceProcessor tokenPersistenceProcessor = new HashingPersistenceProcessor();
-        String hashedrefreshToken = tokenPersistenceProcessor.getProcessedRefreshToken(refreshToken);
-        return hashedrefreshToken;
     }
 
     /**
@@ -1812,8 +1770,87 @@ public class OAuth2Util {
     }
 
     /**
-     * Method to check wether RSA+OAEP encruption algortihm is enabled and EncryptionDecryptionPersistenceProcessor
-     * is enabled.
+     * Method to check whether a encrypted value is in RSA+OAEP and wrapped with JSON format
+     * When using EncryptionDecryptionPersistenceProcessor for oauth key encryption, if RSA+OAEP encryption
+     * algorithm is enabled in carbon.properties file as 'org
+     * .wso2.CipherTransformation=RSA/ECB/OAEPwithSHA1andMGF1Padding' CryptoUtil class will encrypt the oauth key
+     * with RSA+OAEP algorithm and further will add some more metadata and wrap them in a JSON format.
+     * Ex:
+     * {
+     * "c":"Npctne9G6K...noOOtVgE\u003d",
+     * "t":"RSA/ECB/OAEPwithSHA1andMGF1Padding",
+     * "tp":"6BF8E136EB36D4A56EA05C7AE4B9A45B63BF975D"
+     * }
+     * This method will check whether some encrypted value is in above format.It will be an indication that the value
+     * is encrypted in the custom RSA+OAEP encryption with JSON wrapper.
+     *
+     * @param processedKey
+     * @return boolean
+     * @throws IdentityOAuth2Exception
+     */
+    public static boolean isCustomEncryptionWIthJSONWrapper(String processedKey) throws IdentityOAuth2Exception {
+
+        try {
+            return CryptoUtil.getDefaultCryptoUtil().base64DecodeAndCheckCustomEncryption(processedKey);
+        } catch (CryptoException e) {
+            throw new IdentityOAuth2Exception("Error while checking for custom encryption", e);
+        }
+    }
+
+    /**
+     * Method to hash the client secret
+     *
+     * @param clientSecret
+     * @return hashed client secret
+     * @throws IdentityOAuth2Exception
+     */
+    public static String hashClientSecret(String clientSecret) throws IdentityOAuth2Exception {
+
+        return new HashingPersistenceProcessor().getProcessedClientSecret(clientSecret);
+    }
+
+    /**
+     * Method to hash the authorization code
+     *
+     * @param authzCode
+     * @return hashed authorization code
+     * @throws IdentityOAuth2Exception
+     */
+    public static String hashAuthzCode(String authzCode) throws IdentityOAuth2Exception {
+
+        return new HashingPersistenceProcessor().getProcessedAuthzCode(authzCode);
+    }
+
+    /**
+     * Method to hash the access token
+     *
+     * @param accessTokenIdentifier
+     * @return hashed access token
+     * @throws IdentityOAuth2Exception
+     */
+    public static String hashAccessTokenIdentifier(String accessTokenIdentifier) throws IdentityOAuth2Exception {
+
+        return new HashingPersistenceProcessor().getProcessedAccessTokenIdentifier(accessTokenIdentifier);
+    }
+
+    /**
+     * Method to hash the refresh token
+     *
+     * @param refreshToken
+     * @return hashed refresh token
+     * @throws IdentityOAuth2Exception
+     */
+    public static String hashRefreshToken(String refreshToken) throws IdentityOAuth2Exception {
+
+        return new HashingPersistenceProcessor().getProcessedRefreshToken(refreshToken);
+    }
+
+    /**
+     * Method to check whether RSA+OAEP encryption algorithm is enabled and EncryptionDecryptionPersistenceProcessor
+     * is enabled in identity xml.
+     * RSA + OAEP algorithm get enabled if carbon.properties file has following system property
+     * org.wso2.CipherTransformation=RSA/ECB/OAEPwithSHA1andMGF1Padding
+     *
      * @return true or false
      * @throws IdentityOAuth2Exception
      */
@@ -1827,7 +1864,12 @@ public class OAuth2Util {
     }
 
     /**
-     * Method to check whether columns with name ACCESS_TOKEN_HASH and REFRESH_TOKEN_HASH is created.
+     * Method to check whether new columns with name ACCESS_TOKEN_HASH and REFRESH_TOKEN_HASH are created.
+     * If oauth2 is using RSA+OAEP encryption algorithm it is must to have these two hash columns.
+     * With the new encryption algorithm searching is done using hash.
+     * As the encryption algorithm provides dynamic encryption values searching cannot be done with encrypted values.
+     * Thus, using hashing.
+     *
      * @return true if columns are available else return false
      * @throws IdentityOAuth2Exception
      */
@@ -1841,19 +1883,19 @@ public class OAuth2Util {
                 String sql;
                 if (connection.getMetaData().getDriverName().contains("MySQL") || connection.getMetaData()
                         .getDriverName().contains("H2")) {
-                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_HASH_MYSQL;
+                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_TABLE_MYSQL;
                 } else if (connection.getMetaData().getDatabaseProductName().contains("DB2")) {
-                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_HASH_DB2SQL;
+                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_TABLE_DB2SQL;
                 } else if (connection.getMetaData().getDriverName().contains("MS SQL") || connection.getMetaData()
                         .getDriverName().contains("Microsoft")) {
-                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_HASH_MSSQL;
+                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_TABLE_MSSQL;
                 } else if (connection.getMetaData().getDriverName().contains("PostgreSQL")) {
-                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_HASH_MYSQL;
+                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_TABLE_MYSQL;
                 } else if (connection.getMetaData().getDriverName().contains("Informix")) {
                     // Driver name = "IBM Informix JDBC Driver for IBM Informix Dynamic Server"
-                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_HASH_INFORMIX;
+                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_TABLE_INFORMIX;
                 } else {
-                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_HASH_ORACLE;
+                    sql = SQLQueries.RETRIEVE_ACCESS_TOKEN_TABLE_ORACLE;
                 }
                 preparedStatement = connection.prepareStatement(sql);
                 resultSet = preparedStatement.executeQuery();
@@ -1866,8 +1908,9 @@ public class OAuth2Util {
                 }
             } catch (SQLException e) {
                 throw new IdentityOAuth2Exception(
-                        "Error occurred while checking for columns: " + ACCESS_TOKEN_HASH + " and "
-                                + REFRESH_TOKEN_HASH, e);
+                        "Error occurred while checking for columns: " + ACCESS_TOKEN_HASH + " and " + REFRESH_TOKEN_HASH
+                                + "." + " Required column " + ACCESS_TOKEN_HASH + " and " + REFRESH_TOKEN_HASH
+                                + " missing.", e);
             } finally {
                 IdentityDatabaseUtil.closeAllConnections(connection, resultSet, preparedStatement);
             }
@@ -1877,6 +1920,11 @@ public class OAuth2Util {
 
     /**
      * Method to check whether a column with name AUTHORIZATION_CODE_HASH is created.
+     * If oauth2 is using RSA+OAEP encryption algorithm it is must to have this hash column.
+     * With the new encryption algorithm searching is done using hash.
+     * As the encryption algorithm provides dynamic encryption values searching cannot be done with encrypted values.
+     * Thus, using hashing.
+     *
      * @return true if column is available else return false
      * @throws IdentityOAuth2Exception
      */
@@ -1890,19 +1938,19 @@ public class OAuth2Util {
                 String sql;
                 if (connection.getMetaData().getDriverName().contains("MySQL") || connection.getMetaData()
                         .getDriverName().contains("H2")) {
-                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_HASH_MYSQL;
+                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_TABLE_MYSQL;
                 } else if (connection.getMetaData().getDatabaseProductName().contains("DB2")) {
-                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_HASH_DB2SQL;
+                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_TABLE_DB2SQL;
                 } else if (connection.getMetaData().getDriverName().contains("MS SQL") || connection.getMetaData()
                         .getDriverName().contains("Microsoft")) {
-                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_HASH_MSSQL;
+                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_TABLE_MSSQL;
                 } else if (connection.getMetaData().getDriverName().contains("PostgreSQL")) {
-                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_HASH_MYSQL;
+                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_TABLE_MYSQL;
                 } else if (connection.getMetaData().getDriverName().contains("Informix")) {
                     // Driver name = "IBM Informix JDBC Driver for IBM Informix Dynamic Server"
-                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_HASH_INFORMIX;
+                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_TABLE_INFORMIX;
                 } else {
-                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_HASH_ORACLE;
+                    sql = SQLQueries.RETRIEVE_AUTHORIZATION_CODE_TABLE_ORACLE;
                 }
                 preparedStatement = connection.prepareStatement(sql);
                 resultSet = preparedStatement.executeQuery();
@@ -1914,7 +1962,8 @@ public class OAuth2Util {
                 }
             } catch (SQLException e) {
                 throw new IdentityOAuth2Exception(
-                        "Error occurred while checking for columns: " + AUTHORIZATION_CODE_HASH, e);
+                        "Error occurred while checking for columns: " + AUTHORIZATION_CODE_HASH + "." + "Required "
+                                + "column " + AUTHORIZATION_CODE_HASH + " missing.", e);
             } finally {
                 IdentityDatabaseUtil.closeAllConnections(connection, resultSet, preparedStatement);
             }
@@ -1924,6 +1973,11 @@ public class OAuth2Util {
 
     /**
      * Method to check whether a column with name CONSUMER_SECRET_HASH is created.
+     * If oauth2 is using RSA+OAEP encryption algorithm it is must to have this hash column.
+     * With the new encryption algorithm searching is done using hash.
+     * As the encryption algorithm provides dynamic encryption values searching cannot be done with encrypted values.
+     * Thus, using hashing.
+     *
      * @return true if column is available else return false
      * @throws IdentityOAuth2Exception
      */
@@ -1937,19 +1991,19 @@ public class OAuth2Util {
                 String sql;
                 if (connection.getMetaData().getDriverName().contains("MySQL") || connection.getMetaData()
                         .getDriverName().contains("H2")) {
-                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_HASH_MYSQL;
+                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_TABLE_MYSQL;
                 } else if (connection.getMetaData().getDatabaseProductName().contains("DB2")) {
-                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_HASH_DB2SQL;
+                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_TABLE_DB2SQL;
                 } else if (connection.getMetaData().getDriverName().contains("MS SQL") || connection.getMetaData()
                         .getDriverName().contains("Microsoft")) {
-                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_HASH_MSSQL;
+                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_TABLE_MSSQL;
                 } else if (connection.getMetaData().getDriverName().contains("PostgreSQL")) {
-                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_HASH_MYSQL;
+                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_TABLE_MYSQL;
                 } else if (connection.getMetaData().getDriverName().contains("Informix")) {
                     // Driver name = "IBM Informix JDBC Driver for IBM Informix Dynamic Server"
-                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_HASH_INFORMIX;
+                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_TABLE_INFORMIX;
                 } else {
-                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_HASH_ORACLE;
+                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_TABLE_ORACLE;
                 }
                 preparedStatement = connection.prepareStatement(sql);
                 resultSet = preparedStatement.executeQuery();
@@ -1960,8 +2014,9 @@ public class OAuth2Util {
                     return true;
                 }
             } catch (SQLException e) {
-                throw new IdentityOAuth2Exception("Error occurred while checking for columns: " + CONSUMER_SECRET_HASH,
-                        e);
+                throw new IdentityOAuth2Exception(
+                        "Error occurred while checking for columns: " + CONSUMER_SECRET_HASH + "." + "Required column "
+                                + CONSUMER_SECRET_HASH + " missing.", e);
             } finally {
                 IdentityDatabaseUtil.closeAllConnections(connection, resultSet, preparedStatement);
             }
@@ -1972,58 +2027,14 @@ public class OAuth2Util {
     /**
      * Method to check if columns to store access token hash, refresh token hash, consumer secret hash and
      * authorization code hash is available
-     * @return
+     *
+     * @return true or false
      * @throws IdentityOAuth2Exception
      */
     public static boolean checkHashColumns() throws IdentityOAuth2Exception {
 
-        return isAccessTokenHashColumnCreated() && isAuthzCodeHashColumnCreated()
-                && isConsumerSecretHashColumnCreated();
+        return checkTokenHashColumn() && checkAuthzCodeHashColumn() && checkConsumerSecretHashColumn();
     }
 
-    /**
-     * Method to check if a column to store access token hash is available
-     * @return
-     * @throws IdentityOAuth2Exception
-     */
-    private static boolean isAccessTokenHashColumnCreated() throws IdentityOAuth2Exception {
-
-        if (OAuth2Util.checkTokenHashColumn()) {
-            return true;
-        } else {
-            log.error("Required column" + ACCESS_TOKEN_HASH + " missing");
-            return false;
-        }
-    }
-
-    /**
-     * Method to check if a column to store access authorization code hash is available
-     * @return
-     * @throws IdentityOAuth2Exception
-     */
-    private static boolean isAuthzCodeHashColumnCreated() throws IdentityOAuth2Exception {
-
-        if (OAuth2Util.checkAuthzCodeHashColumn()) {
-            return true;
-        } else {
-            log.error("Required column" + AUTHORIZATION_CODE_HASH + " missing");
-            return false;
-        }
-    }
-
-    /**
-     * Method to check if a column to store consumer secret hash is available
-     * @return
-     * @throws IdentityOAuth2Exception
-     */
-    private static boolean isConsumerSecretHashColumnCreated() throws IdentityOAuth2Exception {
-
-        if (OAuth2Util.checkConsumerSecretHashColumn()) {
-            return true;
-        } else {
-            log.error("Required column" + CONSUMER_SECRET_HASH + " missing");
-            return false;
-        }
-    }
 }
 

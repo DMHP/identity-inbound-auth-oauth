@@ -506,7 +506,7 @@ public class TokenMgtDAO {
                     String accessToken = null;
                     if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                         accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
-                        if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
+                        if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(1))) {
                             accessTokensList.add(new TokenMgtDAOAccessTokens(accessToken, resultSet.getString(1)));
                            // updateNewEncryptedToken(connection, accessToken, resultSet.getString(1));
                         }
@@ -517,7 +517,7 @@ public class TokenMgtDAO {
                     if (resultSet.getString(2) != null) {
                         if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                             refreshToken = persistenceProcessor.getPreprocessedRefreshToken(resultSet.getString(2));
-                            if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(2))) {
+                            if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(2))) {
                                 refreshTokensList.add(new TokenMgtDAORefreshTokens(refreshToken,resultSet.getString
                                         (2)));
                                 //updateNewEncryptedRefreshToken(connection, refreshToken, resultSet.getString(2));
@@ -616,7 +616,7 @@ public class TokenMgtDAO {
                 if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                     accessToken = persistenceProcessor.
                             getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
-                    if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
+                    if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(1))) {
                         accessTokensList.add(new TokenMgtDAOAccessTokens(accessToken, resultSet.getString(1)));
                         //updateNewEncryptedToken(connection, accessToken, resultSet.getString(1));
                     }
@@ -629,7 +629,7 @@ public class TokenMgtDAO {
                     if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                         refreshToken = persistenceProcessor.
                                 getPreprocessedRefreshToken(resultSet.getString(2));
-                        if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(2))) {
+                        if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(2))) {
                             refreshTokensList.add(new TokenMgtDAORefreshTokens(refreshToken,resultSet.getString
                                     (2)));
                             //updateNewEncryptedRefreshToken(connection, refreshToken, resultSet.getString(2));
@@ -1093,7 +1093,7 @@ public class TokenMgtDAO {
                         String accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(
                                 resultSet.getString(1));
                         validationDataDO.setAccessToken(accessToken);
-                        if(!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))){
+                        if(!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(1))){
                             accessTokensList.add(new TokenMgtDAOAccessTokens(accessToken, resultSet.getString(1)));
                             //updateNewEncryptedToken(connection,accessToken,resultSet.getString(1));
                         }
@@ -1140,7 +1140,7 @@ public class TokenMgtDAO {
                                     resultSet1.getString(1));
                             validationDataDO.setAccessToken(
                                     accessToken);
-                            if(!OAuth2Util.isStartWithOaepPrefix(resultSet1.getString(1))){
+                            if(!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet1.getString(1))){
                                 accessTokensList.add(new TokenMgtDAOAccessTokens(accessToken, resultSet1.getString(1)));
                                 //updateNewEncryptedToken(connection,accessToken,resultSet1.getString(1));
                             }
@@ -1609,7 +1609,7 @@ public class TokenMgtDAO {
                 if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                     String accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(rs.getString(1));
                     accessTokens.add(accessToken);
-                    if (!OAuth2Util.isStartWithOaepPrefix(rs.getString(1))) {
+                    if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(rs.getString(1))) {
                         accessTokensList.add(new TokenMgtDAOAccessTokens(accessToken, rs.getString(1)));
                         //updateNewEncryptedToken(connection, accessToken, rs.getString(1));
                     }
@@ -1686,7 +1686,7 @@ public class TokenMgtDAO {
                     if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                         String authzCode = persistenceProcessor.getPreprocessedAuthzCode(rs.getString(1));
                         authorizationCodes.add(authzCode);
-                        if (!OAuth2Util.isStartWithOaepPrefix(rs.getString(1))) {
+                        if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(rs.getString(1))) {
                             authzCodeList.add(new TokenMgtDAOAuthzCode(authzCode, OAuth2Util.encryptWithRSA(authzCode)));
                             //updateNewEncryptedAuthzCode(connection, authzCode, rs.getString(1));
                         }
@@ -1742,7 +1742,7 @@ public class TokenMgtDAO {
                 if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                     String accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(rs.getString(1));
                     accessTokens.add(persistenceProcessor.getPreprocessedAccessTokenIdentifier(rs.getString(1)));
-                    if (!OAuth2Util.isStartWithOaepPrefix(rs.getString(1))) {
+                    if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(rs.getString(1))) {
                         accessTokensList.add(new TokenMgtDAOAccessTokens(accessToken, rs.getString(1)));
                        // updateNewEncryptedToken(connection, accessToken, rs.getString(1));
                     }
@@ -1853,7 +1853,7 @@ public class TokenMgtDAO {
                 if(OAuth2Util.checkOAEPEncryptionEnabled()){
                     String authorizationCode = persistenceProcessor.getPreprocessedAuthzCode(rs.getString(1));
                     authorizationCodes.add(authorizationCode);
-                    if(!OAuth2Util.isStartWithOaepPrefix(rs.getString(1))){
+                    if(!OAuth2Util.isCustomEncryptionWIthJSONWrapper(rs.getString(1))){
                         authzCodeList.add(new TokenMgtDAOAuthzCode(authorizationCode, rs.getString(1)));
                         //updateNewEncryptedAuthzCode(connection,authorizationCode,rs.getString(1));
                     }
@@ -1891,7 +1891,7 @@ public class TokenMgtDAO {
                 if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                     String authorizationCode = persistenceProcessor.getPreprocessedAuthzCode(rs.getString(1));
                     authorizationCodes.add(authorizationCode);
-                    if (!OAuth2Util.isStartWithOaepPrefix(rs.getString(1))) {
+                    if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(rs.getString(1))) {
                         authzCodeList.add(new TokenMgtDAOAuthzCode(authorizationCode, rs.getString(1)));
                         //updateNewEncryptedAuthzCode(connection, authorizationCode, rs.getString(1));
                     }
@@ -2234,7 +2234,7 @@ public class TokenMgtDAO {
                 if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                     accessToken = persistenceProcessor.
                             getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
-                    if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
+                    if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(1))) {
                         accessTokensList.add(new TokenMgtDAOAccessTokens(accessToken, resultSet.getString(1)));
                         //updateNewEncryptedToken(connection, accessToken, resultSet.getString(1));
                     }
@@ -2247,7 +2247,7 @@ public class TokenMgtDAO {
                     if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                         refreshToken = persistenceProcessor.
                                 getPreprocessedRefreshToken(resultSet.getString(2));
-                        if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(2))) {
+                        if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(2))) {
                             refreshTokensList.add(new TokenMgtDAORefreshTokens(refreshToken,resultSet.getString
                                     (2)));
                             //updateNewEncryptedRefreshToken(connection, refreshToken, resultSet.getString(2));
@@ -2326,7 +2326,7 @@ public class TokenMgtDAO {
                 String accessToken = null;
                 if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                     accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
-                    if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
+                    if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(1))) {
                         accessTokensList.add(new TokenMgtDAOAccessTokens(accessToken, resultSet.getString(1)));
                         //updateNewEncryptedToken(connection, accessToken, resultSet.getString(1));
                     }
@@ -2338,7 +2338,7 @@ public class TokenMgtDAO {
                     if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                         refreshToken = persistenceProcessor.
                                 getPreprocessedRefreshToken(resultSet.getString(2));
-                        if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(2))) {
+                        if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(2))) {
                             refreshTokensList.add(new TokenMgtDAORefreshTokens(refreshToken,resultSet.getString
                                     (2)));
                             //updateNewEncryptedRefreshToken(connection, refreshToken, resultSet.getString(2));
@@ -3148,7 +3148,7 @@ public class TokenMgtDAO {
                             if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                                 accessToken = persistenceProcessor
                                         .getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
-                                if (OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
+                                if (OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(1))) {
                                     accessTokensList.add(new TokenMgtDAOAccessTokens(accessToken, resultSet.getString(1)));
                                     /*updateNewEncryptedToken(connection, accessToken,
                                             resultSet.getString(1));*/
@@ -3162,7 +3162,7 @@ public class TokenMgtDAO {
                                 if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                                     refreshToken = persistenceProcessor
                                             .getPreprocessedRefreshToken(resultSet.getString(2));
-                                    if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(2))) {
+                                    if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(2))) {
                                         refreshTokensList.add(new TokenMgtDAORefreshTokens(refreshToken,resultSet.getString
                                                 (2)));
                                         /*updateNewEncryptedRefreshToken(connection, refreshToken,
@@ -3308,7 +3308,7 @@ public class TokenMgtDAO {
                 String accessToken = null;
                 if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                     accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
-                    if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
+                    if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(1))) {
                         accessTokensList.add(new TokenMgtDAOAccessTokens(accessToken, resultSet.getString(1)));
                         //updateNewEncryptedToken(connection, accessToken, resultSet.getString(1));
                     }
@@ -3319,7 +3319,7 @@ public class TokenMgtDAO {
                 if (resultSet.getString(2) != null) {
                     if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                         refreshToken = persistenceProcessor.getPreprocessedRefreshToken(resultSet.getString(2));
-                        if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(2))) {
+                        if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(2))) {
                             refreshTokensList.add(new TokenMgtDAORefreshTokens(refreshToken,resultSet.getString
                                     (2)));
                             //updateNewEncryptedRefreshToken(connection, refreshToken, resultSet.getString(2));

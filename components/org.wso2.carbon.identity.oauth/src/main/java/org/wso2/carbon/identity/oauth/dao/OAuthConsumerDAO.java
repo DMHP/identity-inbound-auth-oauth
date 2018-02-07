@@ -75,7 +75,7 @@ public class OAuthConsumerDAO {
             if (resultSet.next()) {
                 if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                     consumerSecret = persistenceProcessor.getPreprocessedClientSecret(resultSet.getString(1));
-                    if (!OAuth2Util.isStartWithOaepPrefix(resultSet.getString(1))) {
+                    if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(1))) {
                         consumerSecretsList
                                 .add(new OauthConsumerDAOConsumerSecrets(consumerSecret, resultSet.getString(1)));
                     }

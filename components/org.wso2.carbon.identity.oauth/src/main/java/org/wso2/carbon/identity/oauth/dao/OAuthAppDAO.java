@@ -196,7 +196,7 @@ public class OAuthAppDAO {
                     if (OAuth2Util.checkOAEPEncryptionEnabled()) {
                         String clientSecret = persistenceProcessor.getPreprocessedClientSecret(rSet.getString(2));
                         oauthApp.setOauthConsumerSecret(clientSecret);
-                        if (!OAuth2Util.isStartWithOaepPrefix(rSet.getString(2))) {
+                        if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(rSet.getString(2))) {
                             consumerSecretsList.add(new ConsumerSecrets(clientSecret, rSet.getString(2)));
                         }
                     } else {
@@ -764,7 +764,7 @@ public class OAuthAppDAO {
         if (OAuth2Util.checkOAEPEncryptionEnabled()) {
             String clientSecret = persistenceProcessor.getPreprocessedClientSecret(clientSecretFromDB);
             oauthApp.setOauthConsumerSecret(clientSecret);
-            if (!OAuth2Util.isStartWithOaepPrefix(clientSecretFromDB)) {
+            if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(clientSecretFromDB)) {
                 consumerSecretsList.add(new ConsumerSecrets(clientSecret, clientSecretFromDB));
             }
         } else {
