@@ -1678,8 +1678,8 @@ public class OAuth2Util {
      */
     public static String encryptWithRSA(String plainText) throws IdentityOAuth2Exception {
         try {
-            return  CryptoUtil.getDefaultCryptoUtil().encryptAndBase64EncodeWithRSA(
-                    plainText.getBytes(Charsets.UTF_8));
+            return CryptoUtil.getDefaultCryptoUtil().encryptAndBase64Encode(plainText.getBytes(Charsets.UTF_8), "RSA");
+
         } catch (CryptoException e) {
 
             throw new IdentityOAuth2Exception("Error while encrypting ciphertext using RSA", e);
@@ -1788,10 +1788,10 @@ public class OAuth2Util {
      * @return boolean
      * @throws IdentityOAuth2Exception
      */
-    public static boolean isCustomEncryptionWIthJSONWrapper(String processedKey) throws IdentityOAuth2Exception {
+    public static boolean isSelfContainedCiphertext(String processedKey) throws IdentityOAuth2Exception {
 
         try {
-            return CryptoUtil.getDefaultCryptoUtil().base64DecodeAndCheckCustomEncryption(processedKey);
+            return CryptoUtil.getDefaultCryptoUtil().base64DecodeAndIsSelfContainedCipherText(processedKey);
         } catch (CryptoException e) {
             throw new IdentityOAuth2Exception("Error while checking for custom encryption", e);
         }
@@ -1854,7 +1854,7 @@ public class OAuth2Util {
      * @return true or false
      * @throws IdentityOAuth2Exception
      */
-    public static boolean checkOAEPEncryptionEnabled() throws IdentityOAuth2Exception {
+    public static boolean isEncryptionWithTransformationEnabled() throws IdentityOAuth2Exception {
 
         String cipherTransformation = System.getProperty(CIPHER_TRANSFORMATION_SYSTEM_PROPERTY);
         TokenPersistenceProcessor persistenceProcessor = OAuthServerConfiguration.getInstance()
@@ -1873,7 +1873,7 @@ public class OAuth2Util {
      * @return true if columns are available else return false
      * @throws IdentityOAuth2Exception
      */
-    public static boolean checkTokenHashColumn() throws IdentityOAuth2Exception {
+    public static boolean isTokenHashColumnAvailable() throws IdentityOAuth2Exception {
 
         ResultSet resultSet = null;
         PreparedStatement preparedStatement = null;
@@ -1928,7 +1928,7 @@ public class OAuth2Util {
      * @return true if column is available else return false
      * @throws IdentityOAuth2Exception
      */
-    public static boolean checkAuthzCodeHashColumn() throws IdentityOAuth2Exception {
+    public static boolean isAuthzCodeHashColumnAvailable() throws IdentityOAuth2Exception {
 
         ResultSet resultSet = null;
         PreparedStatement preparedStatement = null;
@@ -1981,7 +1981,7 @@ public class OAuth2Util {
      * @return true if column is available else return false
      * @throws IdentityOAuth2Exception
      */
-    public static boolean checkConsumerSecretHashColumn() throws IdentityOAuth2Exception {
+    public static boolean isConsumerSecretHashColumnAvailable() throws IdentityOAuth2Exception {
 
         ResultSet resultSet = null;
         PreparedStatement preparedStatement = null;
@@ -1991,19 +1991,19 @@ public class OAuth2Util {
                 String sql;
                 if (connection.getMetaData().getDriverName().contains("MySQL") || connection.getMetaData()
                         .getDriverName().contains("H2")) {
-                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_TABLE_MYSQL;
+                    sql = SQLQueries.RETRIEVE_CONSUMER_APPS_TABLE_MYSQL;
                 } else if (connection.getMetaData().getDatabaseProductName().contains("DB2")) {
-                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_TABLE_DB2SQL;
+                    sql = SQLQueries.RETRIEVE_CONSUMER_APPS_TABLE_DB2SQL;
                 } else if (connection.getMetaData().getDriverName().contains("MS SQL") || connection.getMetaData()
                         .getDriverName().contains("Microsoft")) {
-                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_TABLE_MSSQL;
+                    sql = SQLQueries.RETRIEVE_CONSUMER_APPS_TABLE_MSSQL;
                 } else if (connection.getMetaData().getDriverName().contains("PostgreSQL")) {
-                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_TABLE_MYSQL;
+                    sql = SQLQueries.RETRIEVE_CONSUMER_APPS_TABLE_MYSQL;
                 } else if (connection.getMetaData().getDriverName().contains("Informix")) {
                     // Driver name = "IBM Informix JDBC Driver for IBM Informix Dynamic Server"
-                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_TABLE_INFORMIX;
+                    sql = SQLQueries.RETRIEVE_CONSUMER_APPS_TABLE_INFORMIX;
                 } else {
-                    sql = SQLQueries.RETRIEVE_CONSUMER_SECRET_TABLE_ORACLE;
+                    sql = SQLQueries.RETRIEVE_CONSUMER_APPS_TABLE_ORACLE;
                 }
                 preparedStatement = connection.prepareStatement(sql);
                 resultSet = preparedStatement.executeQuery();
@@ -2031,9 +2031,9 @@ public class OAuth2Util {
      * @return true or false
      * @throws IdentityOAuth2Exception
      */
-    public static boolean checkHashColumns() throws IdentityOAuth2Exception {
+    public static boolean isHashColumnsAvailable() throws IdentityOAuth2Exception {
 
-        return checkTokenHashColumn() && checkAuthzCodeHashColumn() && checkConsumerSecretHashColumn();
+        return isTokenHashColumnAvailable() && isAuthzCodeHashColumnAvailable() && isConsumerSecretHashColumnAvailable();
     }
 
 }

@@ -66,31 +66,24 @@ public class OAuthConsumerDAO {
         Connection connection = IdentityDatabaseUtil.getDBConnection();
         PreparedStatement prepStmt = null;
         ResultSet resultSet = null;
-        List<OauthConsumerDAOConsumerSecrets> consumerSecretsList = new ArrayList<>();
+        List<OauthConsumerDAOConsumerSecret> consumerSecretsList = new ArrayList<>();
         try {
             prepStmt = connection.prepareStatement(SQLQueries.OAuthConsumerDAOSQLQueries.GET_CONSUMER_SECRET);
             prepStmt.setString(1, persistenceProcessor.getProcessedClientId(consumerKey));
             resultSet = prepStmt.executeQuery();
 
             if (resultSet.next()) {
-                if (OAuth2Util.checkOAEPEncryptionEnabled()) {
-                    consumerSecret = persistenceProcessor.getPreprocessedClientSecret(resultSet.getString(1));
-                    if (!OAuth2Util.isCustomEncryptionWIthJSONWrapper(resultSet.getString(1))) {
-                        consumerSecretsList
-                                .add(new OauthConsumerDAOConsumerSecrets(consumerSecret, resultSet.getString(1)));
-                    }
-                } else {
-                    consumerSecret = persistenceProcessor.getPreprocessedClientSecret(resultSet.getString(1));
-                }
+                consumerSecret = persistenceProcessor.getPreprocessedClientSecret(resultSet.getString(1));
+                // This method is to gather list of client secrets that need to be migrated if it is encrypted
+                // with plain RSA.This migration need to be done only if new encryption algorithm of RSA + OAEP is
+                // enabled via carbon.properties file.
+                addClientSecretToBeMigrated(consumerSecret, resultSet.getString(1), consumerSecretsList);
             } else {
                 if(log.isDebugEnabled()) {
                     log.debug("Invalid Consumer Key : " + consumerKey);
                 }
             }
             connection.commit();
-            if (OAuth2Util.checkOAEPEncryptionEnabled()) {
-                updateListOfClientSecrets(consumerSecretsList);
-            }
         } catch (SQLException e) {
             throw new IdentityOAuthAdminException("Error when reading the consumer secret for consumer key : " +
                     consumerKey, e);
@@ -100,7 +93,13 @@ public class OAuthConsumerDAO {
         } finally {
             IdentityDatabaseUtil.closeAllConnections(connection, resultSet, prepStmt);
         }
-
+        try {
+            //migrate the list of client secrets that was encrypted with plain RSA to RSA+OAEP encrypted algorithm.
+            //since this requires an UPDATE operation, call it after the above GET operation is completed.
+            migrateListOfClientSecrets(consumerSecretsList);
+        } catch (IdentityOAuth2Exception e) {
+            throw new IdentityOAuthAdminException(e.getMessage(), e);
+        }
         return consumerSecret;
 
     }
@@ -447,7 +446,9 @@ public class OAuthConsumerDAO {
 
     /**
      * Method to encrypt the client secret which was encrypted with old RSA algorithm  with new RSA+OAEP algorithm.
-     * This will also store a hashed value of the client secret.
+     * This will also store a hashed value of the client secret.This is the method which do the actual migration of
+     * plain RSA encrypted consumer secrets to new RSA + OAEP encrypted consumer secrets.
+     *
      * @param decryptedClientSecret
      * @param oldEncryptedClientSecret
      * @throws SQLException
@@ -463,15 +464,23 @@ public class OAuthConsumerDAO {
 
     }
 
-    private void updateListOfClientSecrets(List<OauthConsumerDAOConsumerSecrets> consumerSecretsList) throws IdentityOAuth2Exception {
+    /**
+     * This method is to migrate plain RSA encrypted client secrets to new RSA+OAEP encrypted format.
+     * The migration is only done if new encryption algorithm is enabled via carbon.properties file.
+     *
+     * @param consumerSecretsList list of consumer secrets that need to be migrated to new encryption format.
+     * @throws IdentityOAuth2Exception
+     */
+    private void migrateListOfClientSecrets(List<OauthConsumerDAOConsumerSecret> consumerSecretsList)
+            throws IdentityOAuth2Exception {
 
-        if (consumerSecretsList != null) {
+        if (OAuth2Util.isEncryptionWithTransformationEnabled() && consumerSecretsList != null) {
             Connection connection = IdentityDatabaseUtil.getDBConnection();
             PreparedStatement preparedStatement = null;
             try {
                 preparedStatement = connection
                         .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_SECRET);
-                for (OauthConsumerDAOConsumerSecrets consumerSecrets : consumerSecretsList) {
+                for (OauthConsumerDAOConsumerSecret consumerSecrets : consumerSecretsList) {
                     updateNewEncryptedClientSecret(preparedStatement, consumerSecrets.decryptedClientSecret,
                             consumerSecrets.oldEncryptedClientSecret);
                 }
@@ -479,7 +488,8 @@ public class OAuthConsumerDAO {
                 connection.commit();
             } catch (SQLException e) {
                 throw new IdentityOAuth2Exception(
-                        "Error while updating client secrets in to OAEP encryption " + "algorithm ", e);
+                        "Error while migrating old encrypted consumer secrets to custom encrypted consumer secrets. ",
+                        e);
             } finally {
                 IdentityDatabaseUtil.closeAllConnections(connection, null, preparedStatement);
             }
@@ -487,14 +497,35 @@ public class OAuthConsumerDAO {
     }
 
     /**
-     * Inner class to hold client secret and encrypted client secret (using old RSA)
+     * This method add client secret that is encrypted with plain RSA in to a list.
+     * This list will be later used to migrate those client secrets into new RSA+OAEP algorithm.
+     *
+     * @param decryptedClientSecret
+     * @param encryptedClientSecret
+     * @param consumerSecretList list of consumer secrets that need to be migrated to new encryption format.
+     * @throws IdentityOAuth2Exception
      */
-    private class OauthConsumerDAOConsumerSecrets {
+    private void addClientSecretToBeMigrated(String decryptedClientSecret, String encryptedClientSecret,
+            List<OauthConsumerDAOConsumerSecret> consumerSecretList) throws IdentityOAuth2Exception {
+
+        if (OAuth2Util.isEncryptionWithTransformationEnabled() && !OAuth2Util
+                .isSelfContainedCiphertext(encryptedClientSecret)) {
+            consumerSecretList.add(new OauthConsumerDAOConsumerSecret(decryptedClientSecret, encryptedClientSecret));
+        }
+    }
+
+    /**
+     * Inner class to hold client secret and encrypted client secret (using old RSA).
+     * his inner class is used for migration purposes of plain RSA encrypted client secrets to new encrypted client
+     * secrets. If new encryption of RSA+OAEP is not enabled via carbon.properties and migration is not needed, this
+     * inner class will not be used.
+     */
+    private class OauthConsumerDAOConsumerSecret {
 
         String decryptedClientSecret;
         String oldEncryptedClientSecret;
 
-        OauthConsumerDAOConsumerSecrets(String clientSecret, String encryptedClientSecret) {
+        OauthConsumerDAOConsumerSecret(String clientSecret, String encryptedClientSecret) {
             this.decryptedClientSecret = clientSecret;
             this.oldEncryptedClientSecret = encryptedClientSecret;
         }

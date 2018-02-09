@@ -21,7 +21,6 @@ package org.wso2.carbon.identity.oauth2.internal;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.osgi.framework.BundleContext;
-import org.osgi.framework.BundleException;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.component.ComponentContext;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
@@ -65,81 +64,85 @@ public class OAuth2ServiceComponent {
     private static Log log = LogFactory.getLog(OAuth2ServiceComponent.class);
     private static BundleContext bundleContext;
 
-    protected void activate(ComponentContext context) throws  BundleException {
-        int tenantId = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantId();
-        OAuth2Util.initiateOIDCScopes(tenantId);
-        OAuth2Util.initTokenExpiryTimesOfSps(tenantId);
-        TenantCreationEventListener scopeTenantMgtListener = new TenantCreationEventListener();
-        //Registering OAuth2Service as a OSGIService
-        bundleContext = context.getBundleContext();
-        bundleContext.registerService(OAuth2Service.class.getName(), new OAuth2Service(), null);
-        //Registering TenantCreationEventListener
-        ServiceRegistration scopeTenantMgtListenerSR = bundleContext.registerService(
-                TenantMgtListener.class.getName(), scopeTenantMgtListener, null);
-        if (scopeTenantMgtListenerSR != null) {
-            if (log.isDebugEnabled()) {
-                log.debug(" TenantMgtListener is registered");
-            }
-        } else {
-            log.error("TenantMgtListener could not be registered");
-        }
-        // exposing server configuration as a service 
-        OAuthServerConfiguration oauthServerConfig = OAuthServerConfiguration.getInstance();
-        bundleContext.registerService(OAuthServerConfiguration.class.getName(), oauthServerConfig, null);
-        OAuth2TokenValidationService tokenValidationService = new OAuth2TokenValidationService();
-        bundleContext.registerService(OAuth2TokenValidationService.class.getName(), tokenValidationService, null);
-        if (log.isDebugEnabled()) {
-            log.debug("Identity OAuth bundle is activated");
-        }
-
-        ServiceRegistration tenantMgtListenerSR = bundleContext.registerService(TenantMgtListener.class.getName(),
-                new OAuthTenantMgtListenerImpl(), null);
-        if (tenantMgtListenerSR != null) {
-            if (log.isDebugEnabled()) {
-                log.debug("OAuth - TenantMgtListener registered.");
-            }
-        } else {
-            log.error("OAuth - TenantMgtListener could not be registered.");
-        }
-
-        ServiceRegistration userStoreConfigEventSR = bundleContext.registerService(
-                UserStoreConfigListener.class.getName(), new OAuthUserStoreConfigListenerImpl(), null);
-        if (userStoreConfigEventSR != null) {
-            if (log.isDebugEnabled()) {
-                log.debug("OAuth - UserStoreConfigListener registered.");
-            }
-        } else {
-            log.error("OAuth - UserStoreConfigListener could not be registered.");
-        }
-
-        ServiceRegistration oauthApplicationMgtListenerSR = bundleContext.registerService(ApplicationMgtListener.class.getName(),
-                new OAuthApplicationMgtListener(), null);
-        if (oauthApplicationMgtListenerSR != null) {
-            if (log.isDebugEnabled()) {
-                log.debug("OAuth - ApplicationMgtListener registered.");
-            }
-        } else {
-            log.error("OAuth - ApplicationMgtListener could not be registered.");
-        }
-        if(checkPKCESupport()) {
-            OAuth2ServiceComponentHolder.setPkceEnabled(true);
-            log.info("PKCE Support enabled.");
-        } else {
-            OAuth2ServiceComponentHolder.setPkceEnabled(false);
-            log.info("PKCE Support is disabled.");
-        }
+    protected void activate(ComponentContext context) {
 
         try {
-            if ((OAuth2Util.checkOAEPEncryptionEnabled() && !OAuth2Util.checkHashColumns())) {
+            if ((OAuth2Util.isEncryptionWithTransformationEnabled() && !OAuth2Util.isHashColumnsAvailable())) {
                 throw new IdentityOAuth2Exception("Error occurred while checking for RSA OAEP encryption. Please "
-                        + "check wether RSA+OAEP is enabled, EncryptionDecryptionPersistenceProcessor is enabled and "
+                        + "check whether RSA+OAEP is enabled, EncryptionDecryptionPersistenceProcessor is enabled and "
                         + "necessary hash columns are created.");
+            } else {
+
+                int tenantId = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantId();
+                OAuth2Util.initiateOIDCScopes(tenantId);
+                OAuth2Util.initTokenExpiryTimesOfSps(tenantId);
+                TenantCreationEventListener scopeTenantMgtListener = new TenantCreationEventListener();
+                //Registering OAuth2Service as a OSGIService
+                bundleContext = context.getBundleContext();
+                bundleContext.registerService(OAuth2Service.class.getName(), new OAuth2Service(), null);
+                //Registering TenantCreationEventListener
+                ServiceRegistration scopeTenantMgtListenerSR = bundleContext
+                        .registerService(TenantMgtListener.class.getName(), scopeTenantMgtListener, null);
+                if (scopeTenantMgtListenerSR != null) {
+                    if (log.isDebugEnabled()) {
+                        log.debug(" TenantMgtListener is registered");
+                    }
+                } else {
+                    log.error("TenantMgtListener could not be registered");
+                }
+                // exposing server configuration as a service
+                OAuthServerConfiguration oauthServerConfig = OAuthServerConfiguration.getInstance();
+                bundleContext.registerService(OAuthServerConfiguration.class.getName(), oauthServerConfig, null);
+                OAuth2TokenValidationService tokenValidationService = new OAuth2TokenValidationService();
+                bundleContext.registerService(OAuth2TokenValidationService.class.getName(), tokenValidationService, null);
+                if (log.isDebugEnabled()) {
+                    log.debug("Identity OAuth bundle is activated");
+                }
+
+                ServiceRegistration tenantMgtListenerSR = bundleContext
+                        .registerService(TenantMgtListener.class.getName(), new OAuthTenantMgtListenerImpl(), null);
+                if (tenantMgtListenerSR != null) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("OAuth - TenantMgtListener registered.");
+                    }
+                } else {
+                    log.error("OAuth - TenantMgtListener could not be registered.");
+                }
+
+                ServiceRegistration userStoreConfigEventSR = bundleContext
+                        .registerService(UserStoreConfigListener.class.getName(), new OAuthUserStoreConfigListenerImpl(), null);
+                if (userStoreConfigEventSR != null) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("OAuth - UserStoreConfigListener registered.");
+                    }
+                } else {
+                    log.error("OAuth - UserStoreConfigListener could not be registered.");
+                }
+
+                ServiceRegistration oauthApplicationMgtListenerSR = bundleContext
+                        .registerService(ApplicationMgtListener.class.getName(), new OAuthApplicationMgtListener(), null);
+                if (oauthApplicationMgtListenerSR != null) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("OAuth - ApplicationMgtListener registered.");
+                    }
+                } else {
+                    log.error("OAuth - ApplicationMgtListener could not be registered.");
+                }
+                if (checkPKCESupport()) {
+                    OAuth2ServiceComponentHolder.setPkceEnabled(true);
+                    log.info("PKCE Support enabled.");
+                } else {
+                    OAuth2ServiceComponentHolder.setPkceEnabled(false);
+                    log.info("PKCE Support is disabled.");
+                }
+
             }
         } catch (IdentityOAuth2Exception e) {
             String errorMessage = "Error occurred while checking for RSA OAEP encryption";
             log.error(errorMessage, e);
-            bundleContext.getBundle(0).stop();
         }
+
+
     }
 
     /**
