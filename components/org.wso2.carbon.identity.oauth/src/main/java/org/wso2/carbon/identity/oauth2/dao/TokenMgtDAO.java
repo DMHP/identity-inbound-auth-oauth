@@ -2947,19 +2947,10 @@ public class TokenMgtDAO {
                             addAccessTokenToBeMigrated(accessToken,resultSet.getString(1),accessTokensList);
                             String refreshToken = null;
                             if (resultSet.getString(2) != null) {
-                                if (OAuth2Util.isEncryptionWithTransformationEnabled()) {
-                                    refreshToken = persistenceProcessor
-                                            .getPreprocessedRefreshToken(resultSet.getString(2));
-                                    if (!OAuth2Util.isSelfContainedCiphertext(resultSet.getString(2))) {
-                                        refreshTokensList.add(new TokenMgtDAORefreshToken(refreshToken,resultSet.getString
-                                                (2)));
-                                        /*updateNewEncryptedRefreshToken(connection, refreshToken,
-                                                resultSet.getString(2));*/
-                                    }
-                                } else {
-                                    refreshToken = persistenceProcessor
-                                            .getPreprocessedRefreshToken(resultSet.getString(2));
-                                }
+                                refreshToken = persistenceProcessor.getPreprocessedRefreshToken(resultSet.getString(2));
+                                //if the the refresh token is not in correct encryption format add it to a list to be
+                                // migrated later.
+                                addRefreshTokenToBeMigrated(refreshToken, resultSet.getString(2), refreshTokensList);
                             }
                             long refreshTokenIssuedTime = resultSet.getTimestamp(4,
                                     Calendar.getInstance(TimeZone.getTimeZone("UTC"))).getTime();
@@ -2990,10 +2981,10 @@ public class TokenMgtDAO {
                         iterationCount++;
                     }
                     connection.commit();
-                    if (OAuth2Util.isEncryptionWithTransformationEnabled()) {
-                        migrateListOfAccessTokens(accessTokensList);
-                        migrateListOfRefreshTokens(refreshTokensList);
-                    }
+                    //migrate the list of access tokens and refresh tokens that was encrypted with plain RSA to
+                    // RSA+OAEP encrypted algorithm.
+                    migrateListOfAccessTokens(accessTokensList);
+                    migrateListOfRefreshTokens(refreshTokensList);
                     return accessTokenDOs;
                 }
             }
@@ -3022,7 +3013,7 @@ public class TokenMgtDAO {
         ResultSet resultSet = null;
         List<TokenMgtDAOAccessToken> accessTokensList = new ArrayList<>();
         List<TokenMgtDAORefreshToken> refreshTokensList = new ArrayList<>();
-
+        AccessTokenDO accessTokenDO = null;
         try {
 
             String sql;
@@ -3090,26 +3081,17 @@ public class TokenMgtDAO {
             }
 
             resultSet = prepStmt.executeQuery();
-            AccessTokenDO accessTokenDO = null;
 
             if (resultSet.next()) {
-                String accessToken = null;
-                accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
-                //if the the token is not in correct encryption format add it to a list to be migrated
-                // later.
+                String accessToken = persistenceProcessor.getPreprocessedAccessTokenIdentifier(resultSet.getString(1));
+                //if the the token is not in correct encryption format add it to a list to be migrated later.
                 addAccessTokenToBeMigrated(accessToken, resultSet.getString(1), accessTokensList);
                 String refreshToken = null;
                 if (resultSet.getString(2) != null) {
-                    if (OAuth2Util.isEncryptionWithTransformationEnabled()) {
-                        refreshToken = persistenceProcessor.getPreprocessedRefreshToken(resultSet.getString(2));
-                        if (!OAuth2Util.isSelfContainedCiphertext(resultSet.getString(2))) {
-                            refreshTokensList.add(new TokenMgtDAORefreshToken(refreshToken,resultSet.getString
-                                    (2)));
-                            //updateNewEncryptedRefreshToken(connection, refreshToken, resultSet.getString(2));
-                        }
-                    } else {
-                        refreshToken = persistenceProcessor.getPreprocessedRefreshToken(resultSet.getString(2));
-                    }
+                    refreshToken = persistenceProcessor.getPreprocessedRefreshToken(resultSet.getString(2));
+                    //if the the refresh token is not in correct encryption format add it to a list to be migrated
+                    // later.
+                    addRefreshTokenToBeMigrated(refreshToken, resultSet.getString(2), refreshTokensList);
                 }
                 long issuedTime = resultSet.getTimestamp(3, Calendar.getInstance(TimeZone.getTimeZone("UTC")))
                         .getTime();
@@ -3135,11 +3117,6 @@ public class TokenMgtDAO {
                 accessTokenDO.setTokenId(tokenId);
             }
             connection.commit();
-            if (OAuth2Util.isEncryptionWithTransformationEnabled()) {
-                migrateListOfAccessTokens(accessTokensList);
-                migrateListOfRefreshTokens(refreshTokensList);
-            }
-            return accessTokenDO;
         } catch (SQLException e) {
             IdentityDatabaseUtil.rollBack(connection);
             String errorMsg = "Error occurred while trying to retrieve latest 'ACTIVE' " +
@@ -3152,6 +3129,11 @@ public class TokenMgtDAO {
         } finally {
             IdentityDatabaseUtil.closeAllConnections(null, resultSet, prepStmt);
         }
+        //migrate the list of access tokens and refresh tokens that was encrypted with plain RSA to RSA+OAEP
+        // encrypted algorithm.Since this requires an UPDATE operation, call it after the above GET operation is completed.
+        migrateListOfAccessTokens(accessTokensList);
+        migrateListOfRefreshTokens(refreshTokensList);
+        return accessTokenDO;
     }
 
     /**
