@@ -18,14 +18,21 @@
 package org.wso2.carbon.identity.oauth.tokenprocessor;
 
 import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
+
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 /**
  * An implementation of <Code>TokenPersistenceProcessor</Code>
  * which is used when storing hashed tokens.
  */
 public class HashingPersistenceProcessor implements TokenPersistenceProcessor {
+
+    protected Log log = LogFactory.getLog(HashingPersistenceProcessor.class);
 
     @Override
     public String getProcessedClientId(String clientId) throws IdentityOAuth2Exception {
@@ -94,21 +101,30 @@ public class HashingPersistenceProcessor implements TokenPersistenceProcessor {
      * @param plainText
      * @return hashed value
      */
-    private String hash(String plainText) {
+    private String hash(String plainText) throws IdentityOAuth2Exception {
 
+        MessageDigest messageDigest = null;
+        byte[] hash = null;
         String hashAlgorithm = OAuthServerConfiguration.getInstance().getHashAlgorithm();
-        if (plainText != null) {
-            if ("SHA256".equals(hashAlgorithm)) {
-                return DigestUtils.sha256Hex(plainText);
-            } else if ("SHA512".equals(hashAlgorithm)) {
-                return DigestUtils.sha512Hex(plainText);
-            } else if ("SHA384".equals(plainText)) {
-                return DigestUtils.sha384Hex(plainText);
-            } else {
-                return DigestUtils.sha256Hex(plainText);
-            }
-        } else {
-            return null;
+        try {
+            messageDigest = MessageDigest.getInstance(hashAlgorithm);
+            messageDigest.update(plainText.getBytes());
+            hash = messageDigest.digest();
+
+        } catch (NoSuchAlgorithmException e) {
+            throw new IdentityOAuth2Exception(
+                    "Error while retrieving MessageDigest for the provided hash algorithm: " + hashAlgorithm, e);
         }
+        return bytesToHex(hash);
+
+    }
+
+    private static String bytesToHex(byte[] bytes) {
+
+        StringBuilder result = new StringBuilder();
+        for (byte byt : bytes) {
+            result.append(Integer.toString((byt & 0xff) + 0x100, 16).substring(1));
+        }
+        return result.toString();
     }
 }

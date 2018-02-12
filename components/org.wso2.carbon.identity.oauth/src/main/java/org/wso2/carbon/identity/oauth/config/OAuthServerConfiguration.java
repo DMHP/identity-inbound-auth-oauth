@@ -130,7 +130,7 @@ public class OAuthServerConfiguration {
     private boolean assertionsUserNameEnabled = false;
     private boolean accessTokenPartitioningEnabled = false;
     private String accessTokenPartitioningDomains = null;
-    private String hashAlgorithm = "SHA256";
+    private String hashAlgorithm = "SHA-256";
     private TokenPersistenceProcessor persistenceProcessor = null;
     private Set<OAuthCallbackHandlerMetaData> callbackHandlerMetaData = new HashSet<>();
     private Map<String, String> supportedGrantTypeClassNames = new HashMap<>();

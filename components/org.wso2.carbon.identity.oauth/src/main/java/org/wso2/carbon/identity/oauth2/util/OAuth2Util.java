@@ -1678,7 +1678,8 @@ public class OAuth2Util {
      */
     public static String encryptWithRSA(String plainText) throws IdentityOAuth2Exception {
         try {
-            return CryptoUtil.getDefaultCryptoUtil().encryptAndBase64Encode(plainText.getBytes(Charsets.UTF_8), "RSA");
+            return CryptoUtil.getDefaultCryptoUtil().encryptAndBase64Encode(plainText.getBytes(Charsets.UTF_8),
+                    "RSA", false);
 
         } catch (CryptoException e) {
 
