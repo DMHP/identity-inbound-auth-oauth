@@ -85,10 +85,10 @@ public class OAuth2ServiceComponent {
                         .registerService(TenantMgtListener.class.getName(), scopeTenantMgtListener, null);
                 if (scopeTenantMgtListenerSR != null) {
                     if (log.isDebugEnabled()) {
-                        log.debug(" TenantMgtListener is registered");
+                        log.debug(" TenantMgtListener is registered as an OSGI service");
                     }
                 } else {
-                    log.error("TenantMgtListener could not be registered");
+                    log.error("TenantMgtListener could not be registered as an OSGI service");
                 }
                 // exposing server configuration as a service
                 OAuthServerConfiguration oauthServerConfig = OAuthServerConfiguration.getInstance();

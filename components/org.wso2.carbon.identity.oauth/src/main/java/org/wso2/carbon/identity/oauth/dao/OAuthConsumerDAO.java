@@ -529,7 +529,6 @@ public class OAuthConsumerDAO {
             this.decryptedClientSecret = clientSecret;
             this.oldEncryptedClientSecret = encryptedClientSecret;
         }
-
     }
 
 }
