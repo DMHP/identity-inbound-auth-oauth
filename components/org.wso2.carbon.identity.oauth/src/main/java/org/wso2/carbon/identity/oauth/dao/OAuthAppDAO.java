@@ -36,6 +36,7 @@ import org.wso2.carbon.identity.oauth.tokenprocessor.PlainTextPersistenceProcess
 import org.wso2.carbon.identity.oauth.tokenprocessor.TokenPersistenceProcessor;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 import org.wso2.carbon.identity.oauth2.internal.OAuth2ServiceComponentHolder;
+import org.wso2.carbon.identity.oauth2.util.OAuth2Util;
 import org.wso2.carbon.user.api.UserStoreException;
 import org.wso2.carbon.user.core.service.RealmService;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
@@ -63,7 +64,6 @@ public class OAuthAppDAO {
             log.error("Error retrieving TokenPersistenceProcessor. Defaulting to PlainTextPersistenceProcessor");
             persistenceProcessor = new PlainTextPersistenceProcessor();
         }
-
     }
 
     public void addOAuthApplication(OAuthAppDO consumerAppDO) throws IdentityOAuthAdminException {
@@ -75,9 +75,8 @@ public class OAuthAppDAO {
 
             try {
                 if(OAuth2ServiceComponentHolder.isPkceEnabled()) {
-                    prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.ADD_OAUTH_APP_WITH_PKCE);
+                    prepStmt = getAddAppPreparedStatementWithPKCE(connection, consumerAppDO);
                     prepStmt.setString(1, persistenceProcessor.getProcessedClientId(consumerAppDO.getOauthConsumerKey()));
-                    prepStmt.setString(2, persistenceProcessor.getProcessedClientSecret(consumerAppDO.getOauthConsumerSecret()));
                     prepStmt.setString(3, consumerAppDO.getUser().getUserName());
                     prepStmt.setInt(4, IdentityTenantUtil.getTenantId(consumerAppDO.getUser().getTenantDomain()));
                     prepStmt.setString(5, consumerAppDO.getUser().getUserStoreDomain());
@@ -90,9 +89,8 @@ public class OAuthAppDAO {
                     prepStmt.execute();
                     connection.commit();
                 } else {
-                    prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.ADD_OAUTH_APP);
+                    prepStmt = getAddAppPreparedStatementWithoutPKCE(connection, consumerAppDO);
                     prepStmt.setString(1, persistenceProcessor.getProcessedClientId(consumerAppDO.getOauthConsumerKey()));
-                    prepStmt.setString(2, persistenceProcessor.getProcessedClientSecret(consumerAppDO.getOauthConsumerSecret()));
                     prepStmt.setString(3, consumerAppDO.getUser().getUserName());
                     prepStmt.setInt(4, IdentityTenantUtil.getTenantId(consumerAppDO.getUser().getTenantDomain()));
                     prepStmt.setString(5, consumerAppDO.getUser().getUserStoreDomain());
@@ -158,6 +156,7 @@ public class OAuthAppDAO {
         PreparedStatement prepStmt = null;
         ResultSet rSet = null;
         OAuthAppDO[] oauthAppsOfUser;
+        List<ConsumerSecret> consumerSecretList = new ArrayList<>();
 
         try {
             RealmService realmService = OAuthComponentServiceHolder.getInstance().getRealmService();
@@ -194,7 +193,8 @@ public class OAuthAppDAO {
                 if (rSet.getString(3) != null && rSet.getString(3).length() > 0) {
                     OAuthAppDO oauthApp = new OAuthAppDO();
                     oauthApp.setOauthConsumerKey(persistenceProcessor.getPreprocessedClientId(rSet.getString(1)));
-                    oauthApp.setOauthConsumerSecret(persistenceProcessor.getPreprocessedClientSecret(rSet.getString(2)));
+                    oauthApp.setOauthConsumerSecret(
+                            persistenceProcessor.getPreprocessedClientSecret(rSet.getString(2)));
                     oauthApp.setApplicationName(rSet.getString(3));
                     oauthApp.setOauthVersion(rSet.getString(4));
                     oauthApp.setCallbackUrl(rSet.getString(5));
@@ -210,6 +210,12 @@ public class OAuthAppDAO {
                     }
                     oauthApp.setUser(authenticatedUser);
                     oauthApps.add(oauthApp);
+
+                    // This method is to gather list of client secrets that need to be migrated if it is encrypted
+                    // with plain RSA.This migration need to be done only if new encryption algorithm of OAEP is
+                    // enabled via carbon.properties file.
+                    addClientSecretToBeMigrated(persistenceProcessor.getPreprocessedClientSecret(rSet.getString(2)),
+                            rSet.getString(2), consumerSecretList);
                 }
             }
             oauthAppsOfUser = oauthApps.toArray(new OAuthAppDO[oauthApps.size()]);
@@ -224,6 +230,14 @@ public class OAuthAppDAO {
         } finally {
             IdentityDatabaseUtil.closeAllConnections(connection, rSet, prepStmt);
         }
+
+        try {
+            //migrate the list of client secrets that was encrypted with plain RSA to RSA+OAEP encrypted algorithm.
+            //Since this requires an UPDATE operation, call it after the above GET operation is completed.
+            migrateListOfClientSecrets(consumerSecretList);
+        } catch (IdentityOAuth2Exception e) {
+            throw new IdentityOAuthAdminException(e.getMessage(), e);
+        }
         return oauthAppsOfUser;
     }
 
@@ -233,6 +247,7 @@ public class OAuthAppDAO {
         ResultSet rSet = null;
         OAuthAppDO oauthApp = null;
         boolean isPKCESupportEnabled = OAuth2ServiceComponentHolder.isPkceEnabled();
+        List<ConsumerSecret> consumerSecretList = new ArrayList<>();
         try {
             if (isPKCESupportEnabled) {
                 prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.GET_APP_INFO_WITH_PKCE);
@@ -272,6 +287,12 @@ public class OAuthAppDAO {
                         oauthApp.setPkceSupportPlain("0".equals(rSet.getString(11)) ? false : true);
                     }
                     oauthApps.add(oauthApp);
+
+                    // This method to gather list of client secrets that need to be migrated if it is encrypted
+                    // with plain RSA.This migration need to be done only if new encryption algorithm of OAEP is
+                    // enabled via carbon.properties file.
+                    addClientSecretToBeMigrated(persistenceProcessor.getPreprocessedClientSecret(rSet.getString(1)),
+                            rSet.getString(1), consumerSecretList);
                 }
             }
             if (!rSetHasRows) {
@@ -289,6 +310,10 @@ public class OAuthAppDAO {
         } finally {
             IdentityDatabaseUtil.closeAllConnections(connection, rSet, prepStmt);
         }
+
+        //migrate the list of client secrets that was encrypted with plain RSA to RSA+OAEP encrypted algorithm.
+        //Since this requires an UPDATE operation, call it after the above GET operation is completed.
+        migrateListOfClientSecrets(consumerSecretList);
         return oauthApp;
     }
 
@@ -298,6 +323,7 @@ public class OAuthAppDAO {
         ResultSet rSet = null;
         OAuthAppDO oauthApp = null;
         boolean isPKCESupportEnabled = OAuth2ServiceComponentHolder.isPkceEnabled();
+        List<ConsumerSecret> consumerSecretList = new ArrayList<>();
         try {
             int tenantID = CarbonContext.getThreadLocalCarbonContext().getTenantId();
             if (isPKCESupportEnabled) {
@@ -339,6 +365,11 @@ public class OAuthAppDAO {
                         oauthApp.setPkceSupportPlain("0".equals(rSet.getString(10)) ? false : true);
                     }
                     oauthApps.add(oauthApp);
+                    // This method is to gather list of client secrets that need to be migrated if it is encrypted
+                    // with plain RSA.This migration need to be done only if new encryption algorithm of OAEP is
+                    // enabled via carbon.properties file.
+                    addClientSecretToBeMigrated(persistenceProcessor.getPreprocessedClientSecret(rSet.getString(1)),
+                            rSet.getString(1),consumerSecretList);
                 }
             }
             if (!rSetHasRows) {
@@ -359,18 +390,21 @@ public class OAuthAppDAO {
         } finally {
             IdentityDatabaseUtil.closeAllConnections(connection, rSet, prepStmt);
         }
+        //migrate the list of client secrets that was encrypted with plain RSA to RSA+OAEP encrypted algorithm.
+        //Since this requires an UPDATE operation, call it after the above GET operation is completed.
+        migrateListOfClientSecrets(consumerSecretList);
         return oauthApp;
     }
 
     public void updateConsumerApplication(OAuthAppDO oauthAppDO) throws IdentityOAuthAdminException {
         Connection connection = IdentityDatabaseUtil.getDBConnection();
         PreparedStatement prepStmt = null;
-
+        List<ConsumerSecret> consumerSecretList = new ArrayList<>();
         try {
             if (OAuth2ServiceComponentHolder.isPkceEnabled()) {
-                prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP_WITH_PKCE);
+                prepStmt = getUpdateAppPreparedStatementWithPKCE(connection, oauthAppDO);
             } else {
-                prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP);
+                prepStmt = getUpdateAppPreparedStatementWithoutPKCE(connection, oauthAppDO);
             }
 
             prepStmt.setString(1, oauthAppDO.getApplicationName());
@@ -381,15 +415,19 @@ public class OAuthAppDAO {
                 prepStmt.setString(5, oauthAppDO.isPkceSupportPlain() ? "1" : "0");
 
                 prepStmt.setString(6, persistenceProcessor.getProcessedClientId(oauthAppDO.getOauthConsumerKey()));
-                prepStmt.setString(7, persistenceProcessor.getProcessedClientSecret(oauthAppDO.getOauthConsumerSecret()));
             } else {
                 prepStmt.setString(4, persistenceProcessor.getProcessedClientId(oauthAppDO.getOauthConsumerKey()));
-                prepStmt.setString(5, persistenceProcessor.getProcessedClientSecret(oauthAppDO.getOauthConsumerSecret()));
             }
 
             int count = prepStmt.executeUpdate();
             if (log.isDebugEnabled()) {
                 log.debug("No. of records updated for updating consumer application. : " + count);
+            }
+            if (count == 0) {
+                //If update is not successful check if there is consumer secrets encrypted with Plain RSA when using
+                // new encryption algorithm enabled via carbon.properties file.If so, execute the update query using
+                // plain RSA algorithm.
+                updateConsumerApplicationWithOldRSA(connection,oauthAppDO, consumerSecretList);
             }
             connection.commit();
 
@@ -400,6 +438,13 @@ public class OAuthAppDAO {
                     "TokenPersistenceProcessor", e);
         } finally {
             IdentityDatabaseUtil.closeAllConnections(connection, null, prepStmt);
+        }
+
+        try {
+            //migrate the list of client secrets that was encrypted with plain RSA to RSA+OAEP encrypted algorithm.
+            migrateListOfClientSecrets(consumerSecretList);
+        } catch (IdentityOAuth2Exception e) {
+            throw new IdentityOAuthAdminException(e.getMessage(), e);
         }
     }
 
@@ -551,6 +596,286 @@ public class OAuthAppDAO {
             IdentityDatabaseUtil.closeAllConnections(connection, rSet, prepStmt);
         }
         return isDuplicateConsumer;
+    }
+
+    /**
+     * Method to encrypt the client secret which was encrypted with old RSA algorithm  with new RSA+OAEP algorithm.
+     * This will also store a hashed value of the client secret.
+     *
+     * @param decryptedClientSecret
+     * @param oldEncryptedClientSecret
+     * @throws SQLException
+     * @throws IdentityOAuth2Exception
+     */
+    private void updateNewEncryptedClientSecret(PreparedStatement prepStmt, String decryptedClientSecret,
+            String oldEncryptedClientSecret) throws SQLException, IdentityOAuth2Exception {
+
+        prepStmt.setString(1, persistenceProcessor.getProcessedClientSecret(decryptedClientSecret));
+        prepStmt.setString(2, OAuth2Util.hashClientSecret(decryptedClientSecret));
+        prepStmt.setString(3, oldEncryptedClientSecret);
+        prepStmt.addBatch();
+    }
+
+    /**
+     * Method to check whether a particular client secret is encrypted using old RSA algorithm.
+     * @param connection
+     * @param clientSecret
+     * @return
+     * @throws SQLException
+     * @throws IdentityOAuth2Exception
+     */
+    private boolean isRsaEncryptedClientSecretAvailable(Connection connection, String clientSecret)
+            throws SQLException, IdentityOAuth2Exception {
+        PreparedStatement prepStmt ;
+        prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.CHECK_CONSUMER_SECRET);
+        prepStmt.setString(1, OAuth2Util.encryptWithRSA(clientSecret));
+        ResultSet resultSet = prepStmt.executeQuery();
+        return resultSet.next();
+    }
+
+    /**
+     * This method is to migrate plain RSA encrypted client secrets to new RSA+OAEP encrypted format.
+     * The migration is only done if new encryption algorithm is enabled via carbon.properties file.
+     *
+     * @param consumerSecretList list of consumer secrets that need to be migrated to new encryption format.
+     * @throws IdentityOAuth2Exception
+     */
+    private void migrateListOfClientSecrets(List<ConsumerSecret> consumerSecretList) throws IdentityOAuth2Exception {
+
+        if (OAuth2Util.isEncryptionWithTransformationEnabled() && consumerSecretList != null) {
+            Connection connection = IdentityDatabaseUtil.getDBConnection();
+            PreparedStatement preparedStatement = null;
+            try {
+                preparedStatement = connection
+                        .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_SECRET);
+                for (ConsumerSecret consumerSecret : consumerSecretList) {
+                    updateNewEncryptedClientSecret(preparedStatement, consumerSecret.decryptedClientSecret,
+                            consumerSecret.oldEncryptedClientSecret);
+                }
+                preparedStatement.executeBatch();
+                connection.commit();
+            } catch (SQLException e) {
+                throw new IdentityOAuth2Exception(
+                        "Error while migrating old encrypted consumer secrets to custom encrypted consumer secrets. ",
+                        e);
+            } finally {
+                IdentityDatabaseUtil.closeAllConnections(connection, null, preparedStatement);
+            }
+        }
+    }
+
+    /**
+     * This method will create prepared statement to store newly encrypted(using RSA + OAEP algorithm used in carbon
+     * .properties) client secret and hashed
+     * client
+     * secret when PKCE is enabled. If custom encryption is not enabled, it will store the client secret in the
+     * normal flow inside the else statement.
+     *
+     * @param connection    database connection
+     * @param consumerAppDO
+     * @return PreparedStatement
+     * @throws IdentityOAuth2Exception
+     */
+    private PreparedStatement getAddAppPreparedStatementWithPKCE(Connection connection, OAuthAppDO consumerAppDO)
+            throws IdentityOAuth2Exception {
+
+        PreparedStatement prepStmt;
+        try {
+            if (OAuth2Util.isEncryptionWithTransformationEnabled()) {
+                prepStmt = connection
+                        .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.ADD_OAUTH_APP_WITH_PKCE_WITH_HASH);
+                prepStmt.setString(12, OAuth2Util.
+                        hashClientSecret(consumerAppDO.getOauthConsumerSecret()));
+            } else {
+                prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.ADD_OAUTH_APP_WITH_PKCE);
+            }
+            prepStmt.setString(2,
+                    persistenceProcessor.getProcessedClientSecret(consumerAppDO.getOauthConsumerSecret()));
+            return prepStmt;
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception(
+                    "Error while creating prepared statement to add consumer application with PKCE. ", e);
+        }
+    }
+
+    /**
+     * This method will create prepared statement to store newly encrypted (using RSA + OAEP algorithm used in carbon
+     * .properties) client secret and hashed client
+     * secret when PKCE is not enabled.
+     * If custom encryption is not enabled, it will store the client secret in the normal flow inside the else statement.
+     *
+     * @param connection    database connection
+     * @param consumerAppDO
+     * @return PreparedStatement
+     * @throws IdentityOAuth2Exception
+     */
+    private PreparedStatement getAddAppPreparedStatementWithoutPKCE(Connection connection, OAuthAppDO consumerAppDO)
+            throws IdentityOAuth2Exception {
+
+        PreparedStatement prepStmt;
+        try {
+            if (OAuth2Util.isEncryptionWithTransformationEnabled()) {
+                prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.ADD_OAUTH_APP_WITH_HASH);
+                prepStmt.setString(10, OAuth2Util.hashClientSecret(consumerAppDO.getOauthConsumerSecret()));
+            } else {
+                prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.ADD_OAUTH_APP);
+            }
+            prepStmt.setString(2,
+                    persistenceProcessor.getProcessedClientSecret(consumerAppDO.getOauthConsumerSecret()));
+            return prepStmt;
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception(
+                    "Error while creating prepared statement to add consumer application with out PKCE. ", e);
+        }
+    }
+
+    /**
+     * This method will create prepared statement to search from hashed value of the client secret if new encryption
+     * (using RSA + OAEP algorithm used in carbon.properties) algorithm is used and PKCE is enabled.
+     * If new encryption is not enabled search will go through normal flow in the else block.
+     *
+     * @param connection database connection
+     * @param oauthAppDO
+     * @return
+     * @throws IdentityOAuth2Exception
+     */
+    private PreparedStatement getUpdateAppPreparedStatementWithPKCE(Connection connection, OAuthAppDO oauthAppDO)
+            throws IdentityOAuth2Exception {
+
+        PreparedStatement prepStmt;
+        try {
+            if (OAuth2Util.isEncryptionWithTransformationEnabled()) {
+                prepStmt = connection
+                        .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP_WITH_PKCE_WITH_HASH);
+                prepStmt.setString(7, OAuth2Util.hashClientSecret(oauthAppDO.getOauthConsumerSecret()));
+            } else {
+                prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP_WITH_PKCE);
+                prepStmt.setString(7,
+                        persistenceProcessor.getProcessedClientSecret(oauthAppDO.getOauthConsumerSecret()));
+            }
+            return prepStmt;
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception(
+                    "Error while creating prepared statement to update consumer application" + " with PKCE. ", e);
+        }
+    }
+
+    /**
+     * This method will create prepared statement to search from hashed value of the client secret if new encryption
+     * (using RSA + OAEP algorithm used in carbon.properties) algorithm is used and PKCE is not enabled.
+     * If new encryption is not enabled search will go through normal flow in the else block.
+     *
+     * @param connection database connection
+     * @param oauthAppDO
+     * @return
+     * @throws IdentityOAuth2Exception
+     */
+    private PreparedStatement getUpdateAppPreparedStatementWithoutPKCE(Connection connection, OAuthAppDO oauthAppDO)
+            throws IdentityOAuth2Exception {
+
+        PreparedStatement prepStmt;
+        try {
+            if (OAuth2Util.isEncryptionWithTransformationEnabled()) {
+                prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP_WITH_HASH);
+                prepStmt.setString(5, OAuth2Util.hashClientSecret(oauthAppDO.getOauthConsumerSecret()));
+            } else {
+                prepStmt = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP);
+                prepStmt.setString(5,
+                        persistenceProcessor.getProcessedClientSecret(oauthAppDO.getOauthConsumerSecret()));
+            }
+            return prepStmt;
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception(
+                    "Error while creating prepared statement to update consumer application" + " without PKCE. ", e);
+        }
+    }
+
+    /**
+     * This method is used when new encryption is enabled and yet there are some consumer secrets encrypted with
+     * plain RSA algorithm. In such cases we need to search using the plain RSA encrypted value and execute the
+     * update query. This method will not be used if new encryption algorithm is not enabled in carbon.properties file.
+     * Other than that, the consumer secrets that need to be migrated will be put into a list as well.
+     *
+     * @param connection database connection
+     * @param oauthAppDO
+     * @param consumerSecretList list of consumer secrets that need to be migrated to new encryption format.
+     * @throws IdentityOAuth2Exception
+     * @throws SQLException
+     */
+    private void updateConsumerApplicationWithOldRSA(Connection connection, OAuthAppDO oauthAppDO,
+            List<ConsumerSecret> consumerSecretList)
+            throws IdentityOAuth2Exception, SQLException {
+        //This update operation will happen only if new encryption algorithm is enabled via carbon.properties and
+        // there is consumer secret already encrypted with Plain RSA algorithm.
+        if (OAuth2Util.isEncryptionWithTransformationEnabled() && isRsaEncryptedClientSecretAvailable(connection,
+                oauthAppDO.getOauthConsumerSecret())) {
+            PreparedStatement preparedStatement ;
+            if (OAuth2ServiceComponentHolder.isPkceEnabled()) {
+                preparedStatement = connection
+                        .prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP_WITH_PKCE);
+            } else {
+                preparedStatement = connection.prepareStatement(SQLQueries.OAuthAppDAOSQLQueries.UPDATE_CONSUMER_APP);
+            }
+            preparedStatement.setString(1, oauthAppDO.getApplicationName());
+            preparedStatement.setString(2, oauthAppDO.getCallbackUrl());
+            preparedStatement.setString(3, oauthAppDO.getGrantTypes());
+            if (OAuth2ServiceComponentHolder.isPkceEnabled()) {
+                preparedStatement.setString(4, oauthAppDO.isPkceMandatory() ? "1" : "0");
+                preparedStatement.setString(5, oauthAppDO.isPkceSupportPlain() ? "1" : "0");
+
+                preparedStatement
+                        .setString(6, persistenceProcessor.getProcessedClientId(oauthAppDO.getOauthConsumerKey()));
+                preparedStatement.setString(7, OAuth2Util.encryptWithRSA(oauthAppDO.getOauthConsumerSecret()));
+                addClientSecretToBeMigrated(oauthAppDO.getOauthConsumerSecret(),
+                        OAuth2Util.encryptWithRSA(oauthAppDO.getOauthConsumerSecret()), consumerSecretList);
+            } else {
+                preparedStatement
+                        .setString(4, persistenceProcessor.getProcessedClientId(oauthAppDO.getOauthConsumerKey()));
+                preparedStatement.setString(5, OAuth2Util.encryptWithRSA(oauthAppDO.getOauthConsumerSecret()));
+                addClientSecretToBeMigrated(oauthAppDO.getOauthConsumerSecret(),
+                        OAuth2Util.encryptWithRSA(oauthAppDO.getOauthConsumerSecret()), consumerSecretList);
+            }
+            int count = preparedStatement.executeUpdate();
+            if (log.isDebugEnabled()) {
+                log.debug("No. of records updated for updating consumer application. : " + count);
+            }
+        }
+    }
+
+    /**
+     * This method add client secret that is encrypted with plain RSA in to a list.
+     * This list will be later used to migrate those client secrets into new RSA+OAEP algorithm.
+     *
+     * @param decryptedClientSecret
+     * @param encryptedClientSecret
+     * @param consumerSecretList list of consumer secrets that need to be migrated to new encryption format.
+     * @throws IdentityOAuth2Exception
+     */
+    private void addClientSecretToBeMigrated(String decryptedClientSecret, String encryptedClientSecret,
+            List<ConsumerSecret> consumerSecretList) throws IdentityOAuth2Exception {
+
+        if (OAuth2Util.isEncryptionWithTransformationEnabled() && !OAuth2Util
+                .isSelfContainedCiphertext(encryptedClientSecret)) {
+            consumerSecretList.add(new ConsumerSecret(decryptedClientSecret, encryptedClientSecret));
+        }
+    }
+
+    /**
+     * Inner class to hold client secret and encrypted client secret (using old RSA).
+     * This inner class is used for migration purposes of plain RSA encrypted client secrets to new encrypted client
+     * secrets. If new encryption of RSA+OAEP is not enabled via carbon.properties and migration is not needed, this
+     * inner class will not be used.
+     */
+    private class ConsumerSecret {
+
+        String decryptedClientSecret;
+        String oldEncryptedClientSecret;
+
+        ConsumerSecret(String clientSecret, String encryptedClientSecret) {
+            this.decryptedClientSecret = clientSecret;
+            this.oldEncryptedClientSecret = encryptedClientSecret;
+        }
+
     }
 
 }
