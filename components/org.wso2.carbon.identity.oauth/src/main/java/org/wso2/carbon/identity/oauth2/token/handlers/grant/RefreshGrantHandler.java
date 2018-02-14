@@ -22,12 +22,17 @@ import org.apache.axiom.util.base64.Base64Utils;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.Charsets;
 import org.apache.commons.lang.ArrayUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.oltu.oauth2.common.error.OAuthError;
 import org.apache.oltu.oauth2.common.exception.OAuthSystemException;
+import org.wso2.carbon.identity.application.common.model.ClaimMapping;
 import org.wso2.carbon.identity.base.IdentityConstants;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
+import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCache;
+import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCacheEntry;
+import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCacheKey;
 import org.wso2.carbon.identity.oauth.cache.OAuthCacheKey;
 import org.wso2.carbon.identity.oauth.common.OAuthConstants;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
@@ -46,6 +51,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -392,7 +398,30 @@ public class RefreshGrantHandler extends AbstractAuthorizationGrantHandler {
         tokReqMsgCtx.addProperty("RESPONSE_HEADERS", respHeaders.toArray(
                 new ResponseHeader[respHeaders.size()]));
 
+        addUserAttributesToCache(tokenRespDTO, tokReqMsgCtx);
+
         return tokenRespDTO;
+    }
+
+    private static void addUserAttributesToCache(OAuth2AccessTokenRespDTO tokenRespDTO,
+                                                 OAuthTokenReqMessageContext msgCtx) {
+
+        RefreshTokenValidationDataDO oldAccessToken =
+                (RefreshTokenValidationDataDO) msgCtx.getProperty(PREV_ACCESS_TOKEN);
+        AuthorizationGrantCacheKey oldAuthorizationGrantCacheKey = new AuthorizationGrantCacheKey(oldAccessToken.getAccessToken());
+        AuthorizationGrantCacheEntry grantCacheEntry = AuthorizationGrantCache.getInstance()
+                .getValueFromCacheByToken(oldAuthorizationGrantCacheKey);
+
+        if (grantCacheEntry != null) {
+            AuthorizationGrantCacheKey authorizationGrantCacheKey = new AuthorizationGrantCacheKey(tokenRespDTO.getAccessToken());
+
+            if (StringUtils.isNotBlank(tokenRespDTO.getTokenId())) {
+                grantCacheEntry.setTokenId(tokenRespDTO.getTokenId());
+            }
+
+            AuthorizationGrantCache.getInstance().clearCacheEntryByToken(oldAuthorizationGrantCacheKey);
+            AuthorizationGrantCache.getInstance().addToCacheByToken(authorizationGrantCacheKey, grantCacheEntry);
+        }
     }
 
     @Override
