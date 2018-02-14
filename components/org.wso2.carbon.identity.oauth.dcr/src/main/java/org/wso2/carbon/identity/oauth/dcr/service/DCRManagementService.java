@@ -45,6 +45,7 @@ import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Pattern;
 
 public class DCRManagementService {
 
@@ -55,6 +56,9 @@ public class DCRManagementService {
     private static final String OAUTH_VERSION = "OAuth-2.0";
     // If client secret doesn't expire it should be 0
     private static final String DEFAULT_CLIENT_SECRET_EXPIREY_TIME = "0";
+    // Regex for validating application name.
+    private static String APP_NAME_VALIDATING_REGEX = "^[a-zA-Z0-9._-]*$";
+    private static String UNSUPPORTED_CHARACTERS_IN_REGISTRY = "[\\\\/:*?\"`,~!@#$&;%^*()+=<{}>'|]";
 
     private static DCRManagementService dcrManagementService = new DCRManagementService();
 
@@ -83,6 +87,12 @@ public class DCRManagementService {
             log.debug("Trying to register OAuth application: '" + applicationName + "'");
         }
 
+        // Regex validation of the application name.
+        if (!isRegexValidated(applicationName)) {
+            throw new DCRException("The Application name " + applicationName + " is not valid! It is not adhering to" +
+                    " the regex " + APP_NAME_VALIDATING_REGEX);
+        }
+
         RegistrationResponseProfile info;
         info = this.createOAuthApplication(profile);
 
@@ -108,8 +118,16 @@ public class DCRManagementService {
 
         //Subscriber's name should be passed as a parameter, since it's under the subscriber
         //the OAuth App is created.
+        String owner =  profile.getOwner();
+        // Replace all unsupported characters
+        String ownerName = owner.replaceAll(UNSUPPORTED_CHARACTERS_IN_REGISTRY, "_");
+        String applicationName = ownerName + "_" + profile.getClientName();
+        // Regex validation of the application name.
+        if (!isRegexValidated(applicationName)) {
+            throw new DCRException("The Application name " + applicationName + " is not valid! It is not adhering to" +
+                    " the regex " + APP_NAME_VALIDATING_REGEX);
+        }
 
-        String applicationName = profile.getOwner() + "_" + profile.getClientName();
         String grantType = StringUtils.join(profile.getGrantTypes(), " ");
         String baseUser = CarbonContext.getThreadLocalCarbonContext().getUsername();
         String userName = MultitenantUtils.getTenantAwareUsername(profile.getOwner());
@@ -348,5 +366,20 @@ public class DCRManagementService {
                 RegistryType.SYSTEM_CONFIGURATION);
     }
 
+    /**
+     * Validate application name according to the regex
+     *
+     * @return validated or not
+     */
+    public static boolean isRegexValidated(String applicationName) {
+
+        String spValidatorRegex = APP_NAME_VALIDATING_REGEX;
+        Pattern regexPattern = Pattern.compile(spValidatorRegex);
+        if (regexPattern.matcher(applicationName).matches()) {
+            return true;
+        } else {
+            return false;
+        }
+    }
 
 }
