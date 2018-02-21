@@ -40,7 +40,9 @@ import org.opensaml.xml.validation.ValidationException;
 import org.w3c.dom.NodeList;
 import org.wso2.carbon.base.MultitenantConstants;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
+import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
 import org.wso2.carbon.identity.application.common.IdentityApplicationManagementException;
+import org.wso2.carbon.identity.application.common.model.ClaimMapping;
 import org.wso2.carbon.identity.application.common.model.FederatedAuthenticatorConfig;
 import org.wso2.carbon.identity.application.common.model.IdentityProvider;
 import org.wso2.carbon.identity.application.common.model.Property;
@@ -49,19 +51,26 @@ import org.wso2.carbon.identity.application.common.util.IdentityApplicationConst
 import org.wso2.carbon.identity.application.common.util.IdentityApplicationManagementUtil;
 import org.wso2.carbon.identity.base.IdentityConstants;
 import org.wso2.carbon.identity.base.IdentityException;
+import org.wso2.carbon.identity.core.util.IdentityCoreConstants;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
+import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCache;
+import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCacheEntry;
+import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCacheKey;
 import org.wso2.carbon.identity.oauth.common.OAuthConstants;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.identity.oauth.internal.OAuthComponentServiceHolder;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
+import org.wso2.carbon.identity.oauth2.dto.OAuth2AccessTokenRespDTO;
 import org.wso2.carbon.identity.oauth2.internal.OAuth2ServiceComponentHolder;
 import org.wso2.carbon.identity.oauth2.token.OAuthTokenReqMessageContext;
 import org.wso2.carbon.identity.oauth2.token.handlers.grant.AbstractAuthorizationGrantHandler;
+import org.wso2.carbon.identity.oauth2.util.ClaimsUtil;
 import org.wso2.carbon.identity.oauth2.util.OAuth2Util;
 import org.wso2.carbon.identity.oauth2.util.X509CredentialImpl;
 import org.wso2.carbon.idp.mgt.IdentityProviderManagementException;
 import org.wso2.carbon.idp.mgt.IdentityProviderManager;
+import org.wso2.carbon.user.api.UserRealm;
 import org.wso2.carbon.user.api.UserStoreException;
 import org.wso2.carbon.user.api.UserStoreManager;
 import org.wso2.carbon.user.core.service.RealmService;
@@ -71,6 +80,7 @@ import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
@@ -82,12 +92,31 @@ import java.util.Map;
  */
 public class SAML2BearerGrantHandler extends AbstractAuthorizationGrantHandler {
 
+    private static final String PROP_IDP_ENTITY_ID = "IdPEntityId";
     private static Log log = LogFactory.getLog(SAML2BearerGrantHandler.class);
     SAMLSignatureProfileValidator profileValidator = null;
 
     public static final String FEDERATED_USER_DOMAIN_PREFIX = "FEDERATED";
     public static final String LOCAL_USER_TYPE = "LOCAL";
     public static final String LEGACY_USER_TYPE = "LEGACY";
+
+    private final static String INBOUND_AUTH2_TYPE = "oauth2";
+    private final static String SP_DIALECT = "http://wso2.org/oidc/claim";
+
+    private static String userAttributeSeparator = IdentityCoreConstants.MULTI_ATTRIBUTE_SEPARATOR_DEFAULT;
+
+    static {
+        UserRealm realm;
+        try {
+            realm = OAuthComponentServiceHolder.getInstance().getRealmService().getTenantUserRealm
+                    (MultitenantConstants.SUPER_TENANT_ID);
+            UserStoreManager userStoreManager = realm.getUserStoreManager();
+            userAttributeSeparator = ((org.wso2.carbon.user.core.UserStoreManager) userStoreManager)
+                    .getRealmConfiguration().getUserStoreProperty(IdentityCoreConstants.MULTI_ATTRIBUTE_SEPARATOR);
+        } catch (UserStoreException e) {
+            log.warn("Error while reading MultiAttributeSeparator value from primary user store ", e);
+        }
+    }
 
     @Override
     public void init() throws IdentityOAuth2Exception {
@@ -132,7 +161,7 @@ public class SAML2BearerGrantHandler extends AbstractAuthorizationGrantHandler {
             return false;
         }
 
-        Assertion assertion = null;
+        Assertion assertion;
         IdentityProvider identityProvider = null;
         String tokenEndpointAlias = null;
         String tenantDomain = tokReqMsgCtx.getOauth2AccessTokenReqDTO().getTenantDomain();
@@ -171,11 +200,6 @@ public class SAML2BearerGrantHandler extends AbstractAuthorizationGrantHandler {
             return false;
         }
 
-        if (assertion == null) {
-            log.debug("Assertion is null, cannot continue");
-            return false;
-        }
-
         /*
           The Assertion MUST contain a <Subject> element.  The subject MAY identify the resource owner for whom
           the access token is being requested.  For client authentication, the Subject MUST be the "client_id"
@@ -207,7 +231,7 @@ public class SAML2BearerGrantHandler extends AbstractAuthorizationGrantHandler {
         } else {
             try {
                 identityProvider = IdentityProviderManager.getInstance().
-                        getIdPByAuthenticatorPropertyValue("IdPEntityId",
+                        getIdPByAuthenticatorPropertyValue(PROP_IDP_ENTITY_ID,
                                 assertion.getIssuer().getValue(), tenantDomain, false);
                 // IF Federated IDP not found get the resident IDP and check,
                 // resident IDP entityID == issuer
@@ -216,8 +240,7 @@ public class SAML2BearerGrantHandler extends AbstractAuthorizationGrantHandler {
                         log.debug("Found an idp with given information. IDP name : " + identityProvider.getIdentityProviderName());
                     }
 
-                    if (IdentityApplicationConstants.RESIDENT_IDP_RESERVED_NAME.equals(
-                            identityProvider.getIdentityProviderName())) {
+                    if (isResidentIdp(identityProvider)) {
                         identityProvider = IdentityProviderManager.getInstance().getResidentIdP(tenantDomain);
 
                         FederatedAuthenticatorConfig[] fedAuthnConfigs =
@@ -586,6 +609,172 @@ public class SAML2BearerGrantHandler extends AbstractAuthorizationGrantHandler {
         return true;
     }
 
+    @Override
+    public OAuth2AccessTokenRespDTO issue(OAuthTokenReqMessageContext tokenReqMsgCtx) throws IdentityOAuth2Exception {
+
+        OAuth2AccessTokenRespDTO responseDTO = super.issue(tokenReqMsgCtx);
+
+        String[] scope = tokenReqMsgCtx.getScope();
+        if (OAuth2Util.isOIDCAuthzRequest(scope)) {
+            Assertion assertion = (Assertion) tokenReqMsgCtx.getProperty(OAuthConstants.OAUTH_SAML2_ASSERTION);
+
+            if (assertion != null) {
+                Map<String, String> attributes = ClaimsUtil.extractClaimsFromAssertion(tokenReqMsgCtx, responseDTO,
+                        assertion, userAttributeSeparator);
+                if (attributes != null && attributes.size() > 0) {
+                    if (OAuthServerConfiguration.getInstance().isConvertOriginalClaimsFromAssertionsToOIDCDialect()) {
+                        String tenantDomain = tokenReqMsgCtx.getOauth2AccessTokenReqDTO().getTenantDomain();
+                        if (StringUtils.isBlank(tenantDomain)) {
+                            tenantDomain = MultitenantConstants.SUPER_TENANT_DOMAIN_NAME;
+                        }
+                        IdentityProvider identityProvider;
+                        identityProvider = getIdentityProvider(assertion, tenantDomain);
+
+                        boolean localClaimDialect = identityProvider.getClaimConfig().isLocalClaimDialect();
+                        ClaimMapping[] idPClaimMappings = identityProvider.getClaimConfig().getClaimMappings();
+                        Map<String, String> localClaims;
+
+                        if (isResidentIdp(identityProvider)) {
+                            localClaims = handleClaimsForResidentIDP(attributes, identityProvider);
+                        } else {
+                            localClaims = handleClaimsForIDP(attributes, tenantDomain, identityProvider,
+                                    localClaimDialect, idPClaimMappings);
+                        }
+
+                        // ########################### all claims are in local dialect ############################
+
+                        if (localClaims != null && localClaims.size() > 0) {
+                            Map<String, String> oidcClaims;
+                            try {
+                                oidcClaims = ClaimsUtil.convertClaimsToOIDCDialect(tokenReqMsgCtx,
+                                        localClaims);
+                            } catch (IdentityApplicationManagementException | IdentityException e) {
+                                throw new IdentityOAuth2Exception("Error while converting user claims to OIDC dialect" +
+                                        ".");
+                            }
+                            Map<ClaimMapping, String> claimMappings = FrameworkUtils.buildClaimMappings(oidcClaims);
+                            addUserAttributesToCache(responseDTO, tokenReqMsgCtx, claimMappings);
+                        }
+
+                    } else {
+                        // Not converting claims. Sending the claim uris in original format.
+                        Map<ClaimMapping, String> claimMappings = FrameworkUtils.buildClaimMappings(attributes);
+                        addUserAttributesToCache(responseDTO, tokenReqMsgCtx, claimMappings);
+                    }
+                }
+            }
+        }
+
+        return responseDTO;
+    }
+
+    protected IdentityProvider getIdentityProvider(Assertion assertion, String tenantDomain) throws IdentityOAuth2Exception {
+        IdentityProvider identityProvider;
+        try {
+            identityProvider = IdentityProviderManager.getInstance().
+                    getIdPByAuthenticatorPropertyValue(PROP_IDP_ENTITY_ID,
+                            assertion.getIssuer().getValue(), tenantDomain, false);
+        } catch (IdentityProviderManagementException e) {
+            throw new IdentityOAuth2Exception("Error while retrieving Identity provider.", e);
+        }
+
+        if (isResidentIdp(identityProvider)) {
+            try {
+                identityProvider = IdentityProviderManager.getInstance().getResidentIdP(tenantDomain);
+            } catch (IdentityProviderManagementException e) {
+                throw new IdentityOAuth2Exception("Error while retrieving resident Identity provider.", e);
+            }
+        }
+
+        return identityProvider;
+    }
+
+    protected boolean isResidentIdp(IdentityProvider identityProvider) {
+        return IdentityApplicationConstants.RESIDENT_IDP_RESERVED_NAME.equals(
+                identityProvider.getIdentityProviderName());
+    }
+
+    protected Map<String, String> handleClaimsForIDP(Map<String, String> attributes, String tenantDomain,
+                                                     IdentityProvider identityProvider, boolean localClaimDialect,
+                                                     ClaimMapping[] idPClaimMappings) {
+        Map<String, String> localClaims;
+        if (localClaimDialect) {
+            localClaims = handleLocalClaims(attributes, identityProvider);
+        } else {
+            if (idPClaimMappings.length > 0) {
+                localClaims = ClaimsUtil.convertFederatedClaimsToLocalDialect(attributes, idPClaimMappings,
+                        tenantDomain);
+                if (log.isDebugEnabled()) {
+                    log.debug("IDP claims dialect is not local. Converted claims for " +
+                            "identity provider: " + identityProvider.getIdentityProviderName());
+                }
+            } else {
+                localClaims = handleLocalClaims(attributes, identityProvider);
+            }
+        }
+        return localClaims;
+    }
+
+    protected Map<String, String> handleClaimsForResidentIDP(Map<String, String> attributes, IdentityProvider
+            identityProvider) {
+        boolean localClaimDialect;
+        Map<String, String> localClaims = new HashMap<>();
+        localClaimDialect = identityProvider.getClaimConfig().isLocalClaimDialect();
+        if (localClaimDialect) {
+            localClaims = handleLocalClaims(attributes, identityProvider);
+        } else {
+            if (ClaimsUtil.isInLocalDialect(attributes)) {
+                localClaims = attributes;
+                if (log.isDebugEnabled()) {
+                    log.debug("IDP claims dialect is not local. But claims are in local dialect " +
+                            "for identity provider: " + identityProvider.getIdentityProviderName() +
+                            ". Using attributes in assertion as the IDP claims.");
+                }
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug("IDP claims dialect is not local. These claims are not handled for " +
+                            "identity provider: " +identityProvider.getIdentityProviderName());
+                }
+            }
+
+        }
+        return localClaims;
+    }
+
+    private Map<String, String> handleLocalClaims(Map<String, String> attributes, IdentityProvider identityProvider) {
+        Map<String, String> localClaims = new HashMap<>();
+        if (ClaimsUtil.isInLocalDialect(attributes)) {
+            localClaims = attributes;
+            if (log.isDebugEnabled()) {
+                log.debug("Claims are in local dialect for " +
+                        "identity provider: " + identityProvider.getIdentityProviderName() +
+                        ". Using attributes in assertion as the IDP claims.");
+            }
+        } else {
+            if (log.isDebugEnabled()) {
+                log.debug("Claims are not in local dialect " +
+                        "for identity provider: " + identityProvider.getIdentityProviderName() +
+                        ". Not considering attributes in assertion.");
+            }
+        }
+        return localClaims;
+    }
+
+    protected static void addUserAttributesToCache(OAuth2AccessTokenRespDTO tokenRespDTO, OAuthTokenReqMessageContext
+            msgCtx, Map<ClaimMapping, String> userAttributes) {
+
+        AuthorizationGrantCacheKey authorizationGrantCacheKey = new AuthorizationGrantCacheKey(tokenRespDTO
+                .getAccessToken());
+        AuthorizationGrantCacheEntry authorizationGrantCacheEntry = new AuthorizationGrantCacheEntry(userAttributes);
+
+        if (StringUtils.isNotBlank(tokenRespDTO.getTokenId())) {
+            authorizationGrantCacheEntry.setTokenId(tokenRespDTO.getTokenId());
+        }
+
+        AuthorizationGrantCache.getInstance().addToCacheByToken(authorizationGrantCacheKey,
+                authorizationGrantCacheEntry);
+    }
+
     /**
      * Set the user identified from subject identifier from assertion
      *
@@ -612,8 +801,7 @@ public class SAML2BearerGrantHandler extends AbstractAuthorizationGrantHandler {
                         && assertion.getSubject() != null) {
             createLegacyUser(tokReqMsgCtx, assertion);
         } else {
-            if (IdentityApplicationConstants.RESIDENT_IDP_RESERVED_NAME
-                    .equals(identityProvider.getIdentityProviderName())) {
+            if (isResidentIdp(identityProvider)) {
                 try {
                     setLocalUser(tokReqMsgCtx, assertion, spTenantDomain);
                 } catch (UserStoreException e) {

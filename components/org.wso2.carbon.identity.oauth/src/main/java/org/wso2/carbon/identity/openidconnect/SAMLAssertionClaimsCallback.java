@@ -27,11 +27,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.oltu.oauth2.common.exception.OAuthSystemException;
 import org.json.JSONObject;
-import org.opensaml.saml2.core.Assertion;
-import org.opensaml.saml2.core.Attribute;
-import org.opensaml.saml2.core.AttributeStatement;
-import org.opensaml.xml.XMLObject;
-import org.w3c.dom.Element;
 import org.wso2.carbon.base.MultitenantConstants;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.application.authentication.framework.exception.FrameworkException;
@@ -110,58 +105,19 @@ public class SAMLAssertionClaimsCallback implements CustomClaimsCallbackHandler 
 
     @Override
     public void handleCustomClaims(JWTClaimsSet jwtClaimsSet, OAuthTokenReqMessageContext requestMsgCtx) {
-        // reading the token set in the same grant
-        Assertion assertion = (Assertion) requestMsgCtx.getProperty(OAuthConstants.OAUTH_SAML2_ASSERTION);
 
-        if (assertion != null) {
-
-            if (assertion.getSubject() != null) {
-                String subject = assertion.getSubject().getNameID().getValue();
-                if (log.isDebugEnabled()){
-                    log.debug("NameID in Assertion " + subject);
-                }
-                jwtClaimsSet.setSubject(subject);
-            }
-
-            List<AttributeStatement> attributeStatementList = assertion.getAttributeStatements();
-            if (CollectionUtils.isNotEmpty(attributeStatementList)) {
-                for (AttributeStatement statement : attributeStatementList) {
-                    List<Attribute> attributesList = statement.getAttributes();
-                    for (Attribute attribute : attributesList) {
-                        List<XMLObject> values = attribute.getAttributeValues();
-                        String attributeValues = null;
-                        if (values != null) {
-                            for (int i = 0; i < values.size(); i++) {
-                                Element value = attribute.getAttributeValues().get(i).getDOM();
-                                String attributeValue = value.getTextContent();
-                                if (log.isDebugEnabled()) {
-                                    log.debug("Attribute: " + attribute.getName() + ", Value: " + attributeValue);
-                                }
-                                if (StringUtils.isBlank(attributeValues)) {
-                                    attributeValues = attributeValue;
-                                } else {
-                                    attributeValues += userAttributeSeparator + attributeValue;
-                                }
-                                jwtClaimsSet.setClaim(attribute.getName(), attributeValues);
-                            }
-                        }
-                    }
-                }
-            } else {
-                log.debug("No AttributeStatement found! ");
-            }
-        } else {
-            if (log.isDebugEnabled()) {
-                log.debug("Adding claims for user " + requestMsgCtx.getAuthorizedUser() + " to id token.");
-            }
-            try {
-                Map<String, Object> claims = getResponse(requestMsgCtx);
-                setClaimsToJwtClaimSet(claims, jwtClaimsSet);
-            } catch (OAuthSystemException e) {
-                log.error("Error occurred while adding claims of " + requestMsgCtx.getAuthorizedUser() +
-                                " to id token.", e);
-            }
+        if (log.isDebugEnabled()) {
+            log.debug("Adding claims for user " + requestMsgCtx.getAuthorizedUser() + " to id token for client with " +
+                    "id: " + requestMsgCtx.getOauth2AccessTokenReqDTO().getClientId());
         }
+        try {
+            Map<String, Object> claims = getResponse(requestMsgCtx);
+            setClaimsToJwtClaimSet(claims, jwtClaimsSet);
+        } catch (OAuthSystemException e) {
+            log.error("Error occurred while adding claims of " + requestMsgCtx.getAuthorizedUser() +
+                    " to id token.", e);
+        }
+
     }
 
     @Override
