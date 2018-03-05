@@ -46,7 +46,9 @@ import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCache;
 import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCacheEntry;
 import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCacheKey;
+import org.wso2.carbon.identity.oauth.common.GrantType;
 import org.wso2.carbon.identity.oauth.common.OAuthConstants;
+import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.identity.oauth.internal.OAuthComponentServiceHolder;
 import org.wso2.carbon.identity.oauth2.authz.OAuthAuthzReqMessageContext;
 import org.wso2.carbon.identity.oauth2.internal.OAuth2ServiceComponentHolder;
@@ -169,7 +171,7 @@ public class SAMLAssertionClaimsCallback implements CustomClaimsCallbackHandler 
         }
         String tenantDomain = requestMsgCtx.getOauth2AccessTokenReqDTO().getTenantDomain();
         return getEssentialClaims(requestMsgCtx.getScope(), tenantDomain, claims, (RequestObject) requestMsgCtx.
-                getProperty(REQUEST_OBJECT));
+                getProperty(REQUEST_OBJECT), requestMsgCtx.getOauth2AccessTokenReqDTO().getGrantType());
     }
 
     private Map<String, Object> getResponse(OAuthAuthzReqMessageContext requestMsgCtx)
@@ -194,7 +196,8 @@ public class SAMLAssertionClaimsCallback implements CustomClaimsCallbackHandler 
             claims = getClaimsMap(userAttributes);
         }
         String tenantDomain = requestMsgCtx.getAuthorizationReqDTO().getTenantDomain();
-        return getEssentialClaims(requestMsgCtx.getApprovedScope(), tenantDomain, claims, requestMsgCtx.getAuthorizationReqDTO().getRequestObject());
+        return getEssentialClaims(requestMsgCtx.getApprovedScope(), tenantDomain, claims, requestMsgCtx
+                .getAuthorizationReqDTO().getRequestObject(), requestMsgCtx.getAuthorizationReqDTO().getResponseType());
     }
 
     /**
@@ -526,7 +529,8 @@ public class SAMLAssertionClaimsCallback implements CustomClaimsCallbackHandler 
      * @return
      */
     private Map<String, Object> getEssentialClaims(String[] requestedScopes, String tenantDomain,
-                                                   Map<String, Object> claims, RequestObject requestObject) {
+                                                   Map<String, Object> claims, RequestObject requestObject, String
+                                                           grantType) {
         Resource resource = null;
         String requestedScopeClaims;
         String[] arrRequestedScopeClaims;
@@ -561,14 +565,20 @@ public class SAMLAssertionClaimsCallback implements CustomClaimsCallbackHandler 
                         }
                         for (Map.Entry<String, Object> entry : claims.entrySet()) {
                             String requestedClaims = entry.getKey();
-                            if (Arrays.asList(arrRequestedScopeClaims).contains(requestedClaims) ||
-                                    getEssentialClaims(requestObject).contains(requestedClaims)) {
+                            if (GrantType.SAML20_BEARER.toString().equals(grantType)
+                                    && !OAuthServerConfiguration.getInstance()
+                                    .isConvertOriginalClaimsFromAssertionsToOIDCDialect()) {
                                 returnClaims.put(entry.getKey(), claims.get(entry.getKey()));
-                                if (requestedScope.equals("address")) {
-                                    if (!requestedScope.equals("address")) {
-                                        returnClaims.put(entry.getKey(), claims.get(entry.getKey()));
-                                    } else {
-                                        claimsforAddressScope.put(entry.getKey(), claims.get(entry.getKey()));
+                            } else {
+                                if (Arrays.asList(arrRequestedScopeClaims).contains(requestedClaims) ||
+                                        getEssentialClaims(requestObject).contains(requestedClaims)) {
+                                    returnClaims.put(entry.getKey(), claims.get(entry.getKey()));
+                                    if (requestedScope.equals("address")) {
+                                        if (!requestedScope.equals("address")) {
+                                            returnClaims.put(entry.getKey(), claims.get(entry.getKey()));
+                                        } else {
+                                            claimsforAddressScope.put(entry.getKey(), claims.get(entry.getKey()));
+                                        }
                                     }
                                 }
                             }
