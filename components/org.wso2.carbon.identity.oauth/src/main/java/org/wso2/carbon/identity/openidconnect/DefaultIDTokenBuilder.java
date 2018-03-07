@@ -245,7 +245,8 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
         LinkedHashSet acrValue = new LinkedHashSet();
         // AuthorizationCode only available for authorization code grant type
         if (request.getProperty(AUTHORIZATION_CODE) != null) {
-            AuthorizationGrantCacheEntry authorizationGrantCacheEntry = getAuthorizationGrantCacheEntry(request);
+            AuthorizationGrantCacheEntry authorizationGrantCacheEntry = getAuthorizationGrantCacheEntryFromToken
+                    (tokenRespDTO.getAccessToken());
             if (authorizationGrantCacheEntry != null) {
                 nonceValue = authorizationGrantCacheEntry.getNonceValue();
                 acrValue = authorizationGrantCacheEntry.getAcrValue();
@@ -573,18 +574,15 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
 
 
     /**
-     * @param request
+     * Get AuthorizationGrantCacheEntry from access token.
+     *
+     * @param accessToken
      * @return AuthorizationGrantCacheEntry contains user attributes and nonce value
      */
-    private AuthorizationGrantCacheEntry getAuthorizationGrantCacheEntry(
-            OAuthTokenReqMessageContext request) {
+    private AuthorizationGrantCacheEntry getAuthorizationGrantCacheEntryFromToken(String accessToken) {
 
-        String authorizationCode = (String) request.getProperty(AUTHORIZATION_CODE);
-        AuthorizationGrantCacheKey authorizationGrantCacheKey = new AuthorizationGrantCacheKey(authorizationCode);
-        AuthorizationGrantCacheEntry authorizationGrantCacheEntry =
-                (AuthorizationGrantCacheEntry) AuthorizationGrantCache.getInstance().
-                        getValueFromCacheByCode(authorizationGrantCacheKey);
-        return authorizationGrantCacheEntry;
+        AuthorizationGrantCacheKey authorizationGrantCacheKey = new AuthorizationGrantCacheKey(accessToken);
+        return AuthorizationGrantCache.getInstance().getValueFromCacheByToken(authorizationGrantCacheKey);
     }
 
     private long getAccessTokenIssuedTime(String accessToken, OAuthTokenReqMessageContext request)

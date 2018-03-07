@@ -223,7 +223,7 @@
                             org.apache.tomcat.*; version="${tomcat.wso2.imp.pkg.version.range}",
                             org.apache.tomcat.util.http.mapper; version="${tomcat.wso2.imp.pkg.version.range}",
 
-                            org.apache.commons.codec.binary; version="${commons-codec.wso2.osgi.version.range}",
+                            org.apache.commons.codec.*; version="${commons-codec.wso2.osgi.version.range}",
                             org.apache.commons.collections.map; version="${commons-collections.wso2.osgi.version.range}",
                             org.apache.commons.lang; version="${commons-lang.wso2.osgi.version.range}",
                             org.apache.commons.logging; version="${commons-logging.osgi.version.range}",
