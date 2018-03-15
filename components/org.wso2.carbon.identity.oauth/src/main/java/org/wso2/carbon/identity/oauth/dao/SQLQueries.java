@@ -108,6 +108,10 @@ public class SQLQueries {
         public static final String UPDATE_OAUTH_SECRET_KEY = "UPDATE IDN_OAUTH_CONSUMER_APPS SET CONSUMER_SECRET=? WHERE " +
                 "CONSUMER_KEY=?";
 
+        public static final String UPDATE_OAUTH_SECRET_KEY_WITH_HASH = "UPDATE IDN_OAUTH_CONSUMER_APPS SET "
+                + "CONSUMER_SECRET=?, CONSUMER_SECRET_HASH=? WHERE " +
+                "CONSUMER_KEY=?";
+
         public static final String GET_APPLICATION_STATE = "SELECT APP_STATE FROM IDN_OAUTH_CONSUMER_APPS WHERE " +
                 "CONSUMER_KEY=?";
 

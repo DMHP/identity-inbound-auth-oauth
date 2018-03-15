@@ -3391,8 +3391,7 @@ public class TokenMgtDAO {
                 insertTokenPrepStmt.setString(17, accessTokenDO.getRefreshToken());
                 insertTokenPrepStmt.setString(18, persistenceProcessor.getProcessedClientId(consumerKey));
             } else {
-                insertTokenPrepStmt
-                        .setString(2, accessTokenDO.getRefreshToken());
+                insertTokenPrepStmt.setString(2, accessTokenDO.getRefreshToken());
                 insertTokenPrepStmt.setString(16, persistenceProcessor.getProcessedClientId(consumerKey));
             }
         } catch (SQLException e) {
@@ -3805,16 +3804,14 @@ public class TokenMgtDAO {
                 prepStmt = connection.prepareStatement
                         (org.wso2.carbon.identity.oauth.dao.SQLQueries.OAuthAppDAOSQLQueries
                                 .UPDATE_OAUTH_SECRET_KEY_WITH_HASH);
-                prepStmt.setString(2, OAuth2Util.
-                        hashClientSecret(newSecretKey));
+                prepStmt.setString(2, OAuth2Util.hashClientSecret(newSecretKey));
                 prepStmt.setString(3, consumerKey);
             } else {
                 prepStmt = connection.prepareStatement(org.wso2.carbon.identity.oauth.dao.SQLQueries.OAuthAppDAOSQLQueries
                         .UPDATE_OAUTH_SECRET_KEY);
                 prepStmt.setString(2, consumerKey);
             }
-            prepStmt.setString(1,
-                    persistenceProcessor.getProcessedClientSecret(newSecretKey));
+            prepStmt.setString(1, persistenceProcessor.getProcessedClientSecret(newSecretKey));
             return prepStmt;
         } catch (SQLException e) {
             throw new IdentityOAuth2Exception(
