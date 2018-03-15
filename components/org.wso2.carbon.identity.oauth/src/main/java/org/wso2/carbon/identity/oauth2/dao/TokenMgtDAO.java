@@ -2684,10 +2684,7 @@ public class TokenMgtDAO {
                 }
 
                 // update consumer secret of the oauth app
-                updateStateStatement = connection.prepareStatement
-                        (org.wso2.carbon.identity.oauth.dao.SQLQueries.OAuthAppDAOSQLQueries.UPDATE_OAUTH_SECRET_KEY);
-                updateStateStatement.setString(1, newSecretKey);
-                updateStateStatement.setString(2, consumerKey);
+                updateStateStatement = getUpdateConsumerSecretPreparedStatement(connection, newSecretKey, consumerKey);
                 updateStateStatement.execute();
             }
 
@@ -2764,7 +2761,6 @@ public class TokenMgtDAO {
             IdentityDatabaseUtil.closeAllConnections(connection, null, deactiveActiveCodesStatement);
         }
     }
-
 
     private String getSanitizedUserStoreDomain(String userStoreDomain) {
         if (userStoreDomain != null) {
@@ -3798,6 +3794,32 @@ public class TokenMgtDAO {
             this.oldEncryptedRefreshToken = encryptedRefreshToken;
         }
 
+    }
+
+    private PreparedStatement getUpdateConsumerSecretPreparedStatement(Connection connection, String newSecretKey,String consumerKey)
+            throws IdentityOAuth2Exception {
+
+        PreparedStatement prepStmt;
+        try {
+            if (OAuth2Util.isEncryptionWithTransformationEnabled()) {
+                prepStmt = connection.prepareStatement
+                        (org.wso2.carbon.identity.oauth.dao.SQLQueries.OAuthAppDAOSQLQueries
+                                .UPDATE_OAUTH_SECRET_KEY_WITH_HASH);
+                prepStmt.setString(2, OAuth2Util.
+                        hashClientSecret(newSecretKey));
+                prepStmt.setString(3, consumerKey);
+            } else {
+                prepStmt = connection.prepareStatement(org.wso2.carbon.identity.oauth.dao.SQLQueries.OAuthAppDAOSQLQueries
+                        .UPDATE_OAUTH_SECRET_KEY);
+                prepStmt.setString(2, consumerKey);
+            }
+            prepStmt.setString(1,
+                    persistenceProcessor.getProcessedClientSecret(newSecretKey));
+            return prepStmt;
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception(
+                    "Error while creating prepared statement to add consumer application with PKCE. ", e);
+        }
     }
 
     /**
