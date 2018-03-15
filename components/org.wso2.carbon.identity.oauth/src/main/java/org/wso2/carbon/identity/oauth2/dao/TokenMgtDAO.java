@@ -271,8 +271,7 @@ public class TokenMgtDAO {
                 //statement considering whether new encryption is enabled or not.
                 setRefreshTokenInStoreAccessTokenPreparedStatement(insertTokenPrepStmt, accessTokenDO, consumerKey);
             } else {
-                insertTokenPrepStmt.setString(2, accessTokenDO.getRefreshToken());
-                insertTokenPrepStmt.setString(17, persistenceProcessor.getProcessedClientId(consumerKey));
+                setEmptyRefreshTokenInStoreAccessTokenPreparedStatement(insertTokenPrepStmt,accessTokenDO,consumerKey);
             }
 
             insertTokenPrepStmt.setString(3, accessTokenDO.getAuthzUser().getUserName());
@@ -2685,10 +2684,7 @@ public class TokenMgtDAO {
                 }
 
                 // update consumer secret of the oauth app
-                updateStateStatement = connection.prepareStatement
-                        (org.wso2.carbon.identity.oauth.dao.SQLQueries.OAuthAppDAOSQLQueries.UPDATE_OAUTH_SECRET_KEY);
-                updateStateStatement.setString(1, newSecretKey);
-                updateStateStatement.setString(2, consumerKey);
+                updateStateStatement = getUpdateConsumerSecretPreparedStatement(connection, newSecretKey, consumerKey);
                 updateStateStatement.execute();
             }
 
@@ -2765,7 +2761,6 @@ public class TokenMgtDAO {
             IdentityDatabaseUtil.closeAllConnections(connection, null, deactiveActiveCodesStatement);
         }
     }
-
 
     private String getSanitizedUserStoreDomain(String userStoreDomain) {
         if (userStoreDomain != null) {
@@ -3372,6 +3367,7 @@ public class TokenMgtDAO {
 
         try {
             if (OAuth2Util.isEncryptionWithTransformationEnabled()) {
+
                 insertTokenPrepStmt.setString(2, persistenceProcessor.
                         getProcessedRefreshToken(accessTokenDO.getRefreshToken()));
                 insertTokenPrepStmt.setString(17, OAuth2Util.hashRefreshToken(accessTokenDO.getRefreshToken()));
@@ -3386,6 +3382,22 @@ public class TokenMgtDAO {
         }
     }
 
+    private void setEmptyRefreshTokenInStoreAccessTokenPreparedStatement(PreparedStatement insertTokenPrepStmt,
+            AccessTokenDO accessTokenDO, String consumerKey) throws IdentityOAuth2Exception {
+
+        try {
+            if (OAuth2Util.isEncryptionWithTransformationEnabled()) {
+                insertTokenPrepStmt.setString(2, accessTokenDO.getRefreshToken());
+                insertTokenPrepStmt.setString(17, accessTokenDO.getRefreshToken());
+                insertTokenPrepStmt.setString(18, persistenceProcessor.getProcessedClientId(consumerKey));
+            } else {
+                insertTokenPrepStmt.setString(2, accessTokenDO.getRefreshToken());
+                insertTokenPrepStmt.setString(16, persistenceProcessor.getProcessedClientId(consumerKey));
+            }
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception("Error while setting prepared statement to insert refresh token", e);
+        }
+    }
     private PreparedStatement getValidateAuthorizationCodePreparedStatementWithPKCE(Connection connection,
             String authorizationKey) throws IdentityOAuth2Exception {
 
@@ -3781,6 +3793,30 @@ public class TokenMgtDAO {
             this.oldEncryptedRefreshToken = encryptedRefreshToken;
         }
 
+    }
+
+    private PreparedStatement getUpdateConsumerSecretPreparedStatement(Connection connection, String newSecretKey,String consumerKey)
+            throws IdentityOAuth2Exception {
+
+        PreparedStatement prepStmt;
+        try {
+            if (OAuth2Util.isEncryptionWithTransformationEnabled()) {
+                prepStmt = connection.prepareStatement
+                        (org.wso2.carbon.identity.oauth.dao.SQLQueries.OAuthAppDAOSQLQueries
+                                .UPDATE_OAUTH_SECRET_KEY_WITH_HASH);
+                prepStmt.setString(2, OAuth2Util.hashClientSecret(newSecretKey));
+                prepStmt.setString(3, consumerKey);
+            } else {
+                prepStmt = connection.prepareStatement(org.wso2.carbon.identity.oauth.dao.SQLQueries.OAuthAppDAOSQLQueries
+                        .UPDATE_OAUTH_SECRET_KEY);
+                prepStmt.setString(2, consumerKey);
+            }
+            prepStmt.setString(1, persistenceProcessor.getProcessedClientSecret(newSecretKey));
+            return prepStmt;
+        } catch (SQLException e) {
+            throw new IdentityOAuth2Exception(
+                    "Error while creating prepared statement to add consumer application with PKCE. ", e);
+        }
     }
 
     /**
