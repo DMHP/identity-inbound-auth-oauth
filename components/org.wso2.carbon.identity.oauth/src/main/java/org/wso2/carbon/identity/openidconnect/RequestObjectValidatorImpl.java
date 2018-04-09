@@ -22,6 +22,7 @@ import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSVerifier;
 import com.nimbusds.jose.crypto.RSADecrypter;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
+import com.nimbusds.jose.util.Base64URL;
 import com.nimbusds.jwt.EncryptedJWT;
 import com.nimbusds.jwt.SignedJWT;
 import net.minidev.json.JSONObject;
@@ -86,10 +87,12 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
     private static final Base64 base64Url = new Base64(true);
 
     public String getPayload() {
+
         return payload;
     }
 
     public void setPayload(String payload) {
+
         RequestObjectValidatorImpl.payload = payload;
     }
 
@@ -188,24 +191,33 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
      */
     @Override
     public void decrypt(String requestObject, OAuth2Parameters oAuth2Parameters) throws RequestObjectException {
-        EncryptedJWT encryptedJWT;
+
         try {
-            encryptedJWT = EncryptedJWT.parse(requestObject);
+            EncryptedJWT encryptedJWT = EncryptedJWT.parse(requestObject);
             String tenantDomain = getTenantDomainForDecryption(oAuth2Parameters);
             int tenantId = OAuth2Util.getTenantId(tenantDomain);
             Key key = OAuth2Util.getPrivateKey(tenantDomain, tenantId);
-            RSAPrivateKey rsaPrivateKey =(RSAPrivateKey)key;
+            RSAPrivateKey rsaPrivateKey = (RSAPrivateKey) key;
             RSADecrypter decrypter = new RSADecrypter(rsaPrivateKey);
             encryptedJWT.decrypt(decrypter);
-            if (encryptedJWT != null && encryptedJWT.getCipherText() != null) {
-                setPayload(encryptedJWT.getCipherText().toString());
-            }
-            //if the request object is a nested jwt then the payload of the jwe is a jws.
-            if (encryptedJWT != null && encryptedJWT.getCipherText() != null && encryptedJWT.getCipherText().toString()
-                    .split(".").length == NUMBER_OF_PARTS_IN_JWS) {
-                validateSignature(encryptedJWT.getCipherText().toString(), oAuth2Parameters.getCertificate());
-                if (log.isDebugEnabled()) {
-                    log.debug("As the request object is a nested jwt, passed the payload to validate the signature.");
+
+            if (encryptedJWT != null) {
+                Base64URL cipherText = encryptedJWT.getCipherText();
+                if (cipherText != null) {
+                    setPayload(cipherText.toString());
+                    String[] jwtTokenValues = cipherText.toString().split("\\.");
+                    if (jwtTokenValues.length == NUMBER_OF_PARTS_IN_JWS) {
+                        //if the request object is a nested jwt then the payload of the jwe is a jws.
+                        processRequestObject(jwtTokenValues);
+                        validateSignature(encryptedJWT.getCipherText().toString(), oAuth2Parameters.getCertificate());
+                        if (log.isDebugEnabled()) {
+                            log.debug("A nested JWT is found. Extracted the JWS from the JWE and validated the signature.");
+                        }
+                    } else {
+                        if (log.isDebugEnabled()) {
+                            log.debug("A nested JWT is not found. Extracted the payload from the JWE.");
+                        }
+                    }
                 }
             }
         } catch (JOSEException | IdentityOAuth2Exception | java.text.ParseException e) {
@@ -224,6 +236,7 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
     @Override
     public void validateRequestObject(String requestObject, OAuth2Parameters oAuth2Parameters)
             throws RequestObjectException {
+
         if (!OAuth2Util.isValidJson(requestObject)) {
             String[] jwtTokenValues = requestObject.split("\\.");
             if (jwtTokenValues.length == NUMBER_OF_PARTS_IN_JWS) {
@@ -238,6 +251,7 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
     }
 
     private void processRequestObject(String[] jwtTokenValues) {
+
         headerValue = new String(base64Url.decode(jwtTokenValues[0].getBytes()));
         jwtSignature = base64Url.decode(jwtTokenValues[2].getBytes());
         jwtAssertion = jwtTokenValues[0] + "." + jwtTokenValues[1];
@@ -251,10 +265,12 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
      * @return Tenant domain
      */
     private String getTenantDomainForDecryption(OAuth2Parameters oAuth2Parameters) {
+
         return oAuth2Parameters.getTenantDomain();
     }
 
     private JSONObject getJsonHeaderObject() throws RequestObjectException {
+
         JSONParser parser = new JSONParser();
         JSONObject jsonHeaderObject;
         try {
@@ -274,6 +290,7 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
      * @return Absolute file path
      */
     private static String buildFilePath(String path) {
+
         if (StringUtils.isNotEmpty(path) && path.startsWith(".")) {
             // Relative file path is given
             File currentDirectory = new File(new File(".")
@@ -298,6 +315,7 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
      * @return Property value
      */
     private static String getPropertyValue(String key) throws IOException {
+
         if (properties == null) {
             properties = new Properties();
             String configFilePath = buildFilePath(OAuthConstants.CONFIG_RELATIVE_PATH);
@@ -309,6 +327,7 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
     }
 
     private static String getAliasForX509CertThumb(byte[] thumb, KeyStore keyStore) throws RequestObjectException {
+
         Certificate cert;
         MessageDigest sha;
         String alias = null;
@@ -339,6 +358,7 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
     }
 
     private static String hexify(byte bytes[]) {
+
         char[] hexDigits =
                 {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
         StringBuilder buf = new StringBuilder(bytes.length * 2);
