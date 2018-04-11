@@ -27,7 +27,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.oltu.oauth2.common.error.OAuthError;
 import org.apache.oltu.oauth2.common.exception.OAuthSystemException;
-import org.wso2.carbon.identity.application.common.model.ClaimMapping;
 import org.wso2.carbon.identity.base.IdentityConstants;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCache;
@@ -51,7 +50,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -203,7 +201,6 @@ public class RefreshGrantHandler extends AbstractAuthorizationGrantHandler {
             throw new IdentityOAuth2Exception("Error when generating the tokens.", e);
         }
 
-        boolean renew = OAuthServerConfiguration.getInstance().isRefreshTokenRenewalEnabled();
 
         // an active or expired token will be returned. since we do the validation for active or expired token in
         // validateGrant() no need to do it here again
@@ -213,17 +210,25 @@ public class RefreshGrantHandler extends AbstractAuthorizationGrantHandler {
         long issuedTimeMillis = refreshTokenValidationDataDO.getIssuedTime().getTime();
         long refreshValidityMillis = refreshTokenValidationDataDO.getValidityPeriodInMillis();
 
-        if (OAuth2Util.calculateValidityInMillis(issuedTimeMillis, refreshValidityMillis) > 1000) {
-            if (!renew) {
-                // if refresh token renewal not enabled, we use existing one else we issue a new refresh token
-                refreshToken = oauth2AccessTokenReqDTO.getRefreshToken();
-                refreshTokenIssuedTime = refreshTokenValidationDataDO.getIssuedTime();
-                refreshTokenValidityPeriodInMillis = refreshTokenValidationDataDO.getValidityPeriodInMillis();
+        if (refreshValidityMillis > 0) {
+            if (OAuth2Util.calculateValidityInMillis(issuedTimeMillis, refreshValidityMillis) < 1000) {
+                return handleError(OAuthError.TokenResponse.INVALID_GRANT, "Refresh token is expired.", oauth2AccessTokenReqDTO);
             }
         } else {
-            // todo add proper error message/error code
-            return handleError(OAuthError.TokenResponse.INVALID_GRANT, "Refresh token is expired.", oauth2AccessTokenReqDTO);
+            if(log.isDebugEnabled()) {
+                log.debug("The refresh token is never expiring.");
+            }
         }
+
+        // whether to renew the refresh token or not
+        boolean renew = OAuthServerConfiguration.getInstance().isRefreshTokenRenewalEnabled();
+        if (!renew) {
+            // if refresh token renewal not enabled, we use existing one else we issue a new refresh token
+            refreshToken = oauth2AccessTokenReqDTO.getRefreshToken();
+            refreshTokenIssuedTime = refreshTokenValidationDataDO.getIssuedTime();
+        }
+
+
 
         Timestamp timestamp = new Timestamp(new Date().getTime());
 
