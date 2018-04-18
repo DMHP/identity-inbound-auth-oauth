@@ -20,18 +20,18 @@ package org.wso2.carbon.identity.openidconnect;
 
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSVerifier;
+import com.nimbusds.jose.Payload;
 import com.nimbusds.jose.crypto.RSADecrypter;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
-import com.nimbusds.jose.util.Base64URL;
 import com.nimbusds.jwt.EncryptedJWT;
 import com.nimbusds.jwt.SignedJWT;
 import net.minidev.json.JSONObject;
 import net.minidev.json.parser.JSONParser;
 import net.minidev.json.parser.ParseException;
+import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.commons.codec.binary.Base64;
 import org.wso2.carbon.identity.oauth.common.OAuthConstants;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 import org.wso2.carbon.identity.oauth2.RequestObjectException;
@@ -42,17 +42,13 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-
 import java.security.Key;
 import java.security.KeyStore;
-import java.security.MessageDigest;
 import java.security.KeyStoreException;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.InvalidKeyException;
-import java.security.SignatureException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.Enumeration;
@@ -202,14 +198,14 @@ public class RequestObjectValidatorImpl implements RequestObjectValidator {
             encryptedJWT.decrypt(decrypter);
 
             if (encryptedJWT != null) {
-                Base64URL cipherText = encryptedJWT.getCipherText();
+                Payload cipherText = encryptedJWT.getPayload();
                 if (cipherText != null) {
                     setPayload(cipherText.toString());
                     String[] jwtTokenValues = cipherText.toString().split("\\.");
                     if (jwtTokenValues.length == NUMBER_OF_PARTS_IN_JWS) {
                         //if the request object is a nested jwt then the payload of the jwe is a jws.
                         processRequestObject(jwtTokenValues);
-                        validateSignature(encryptedJWT.getCipherText().toString(), oAuth2Parameters.getCertificate());
+                        validateSignature(cipherText.toString(), oAuth2Parameters.getCertificate());
                         if (log.isDebugEnabled()) {
                             log.debug("A nested JWT is found. Extracted the JWS from the JWE and validated the signature.");
                         }
