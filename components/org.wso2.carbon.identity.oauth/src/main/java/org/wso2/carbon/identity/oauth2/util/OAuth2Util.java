@@ -742,9 +742,10 @@ public class OAuth2Util {
 
         long accessTokenValidityPeriodMillis = accessTokenDO.getValidityPeriodInMillis();
 
-        if (accessTokenValidityPeriodMillis < 0 &&
-                IdentityUtil.isTokenLoggable(IdentityConstants.IdentityTokens.ACCESS_TOKEN)) {
-            log.debug("Access Token : " + accessTokenDO.getAccessToken() + " has infinite lifetime");
+        if (accessTokenValidityPeriodMillis < 0) {
+            if (IdentityUtil.isTokenLoggable(IdentityConstants.IdentityTokens.ACCESS_TOKEN)) {
+                log.debug("Access Token : " + accessTokenDO.getAccessToken() + " has infinite lifetime");
+            }
             return -1;
         }
 
