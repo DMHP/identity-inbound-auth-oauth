@@ -422,6 +422,8 @@ public class RefreshGrantHandler extends AbstractAuthorizationGrantHandler {
 
             if (StringUtils.isNotBlank(tokenRespDTO.getTokenId())) {
                 grantCacheEntry.setTokenId(tokenRespDTO.getTokenId());
+            } else {
+                grantCacheEntry.setTokenId(null);
             }
 
             AuthorizationGrantCache.getInstance().clearCacheEntryByToken(oldAuthorizationGrantCacheKey);
