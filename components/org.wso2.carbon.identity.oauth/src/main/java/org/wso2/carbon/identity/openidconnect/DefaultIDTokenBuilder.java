@@ -65,6 +65,7 @@ import org.wso2.carbon.identity.oauth.common.OAuthConstants;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 import org.wso2.carbon.identity.oauth2.authz.OAuthAuthzReqMessageContext;
+import org.wso2.carbon.identity.oauth2.config.SpOAuth2ExpiryTimeConfiguration;
 import org.wso2.carbon.identity.oauth2.dao.TokenMgtDAO;
 import org.wso2.carbon.identity.oauth2.dto.OAuth2AccessTokenRespDTO;
 import org.wso2.carbon.identity.oauth2.dto.OAuth2AuthorizeRespDTO;
@@ -155,7 +156,11 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
                 IdentityApplicationManagementUtil.getProperty(samlAuthenticatorConfig.getProperties(),
                         OPENID_IDP_ENTITY_ID).getValue();
 
-        long lifetimeInMillis = Integer.parseInt(config.getOpenIDConnectIDTokenExpiration()) * 1000;
+        SpOAuth2ExpiryTimeConfiguration expiryTimeConfigurations = OAuth2Util
+                .getSpTokenExpiryTimeConfig(request.getOauth2AccessTokenReqDTO().getClientId(), OAuth2Util
+                        .getTenantId(request.getOauth2AccessTokenReqDTO().getTenantDomain()));
+
+        long lifetimeInMillis = expiryTimeConfigurations.getIdTokenExpiryTime();
         long curTimeInMillis = Calendar.getInstance().getTimeInMillis();
         // setting subject
         String subject = request.getAuthorizedUser().getAuthenticatedSubjectIdentifier();
@@ -353,7 +358,11 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
                 IdentityApplicationManagementUtil.getProperty(samlAuthenticatorConfig.getProperties(),
                         OPENID_IDP_ENTITY_ID).getValue();
 
-        long lifetimeInMillis = Integer.parseInt(config.getOpenIDConnectIDTokenExpiration()) * 1000;
+        SpOAuth2ExpiryTimeConfiguration expiryTimeConfigurations = OAuth2Util
+                .getSpTokenExpiryTimeConfig(request.getAuthorizationReqDTO().getConsumerKey(), OAuth2Util
+                        .getTenantId(request.getAuthorizationReqDTO().getTenantDomain()));
+
+        long lifetimeInMillis = expiryTimeConfigurations.getIdTokenExpiryTime();
         long curTimeInMillis = Calendar.getInstance().getTimeInMillis();
         // setting subject
         String subject = request.getAuthorizationReqDTO().getUser().getAuthenticatedSubjectIdentifier();
