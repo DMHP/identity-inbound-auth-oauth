@@ -160,6 +160,8 @@ public class OAuthServerConfiguration {
     private boolean useMultiValueSeparatorForAuthContextToken = true;
     // Property added to preserve the backward compatibility to send the original claim uris comes in the assertion.
     private boolean convertOriginalClaimsFromAssertionsToOIDCDialect = false;
+    // This property will decide whether to send only mapped roles received from the federated IdP
+    private boolean returnOnlyMappedLocalRoles = false;
 
     // OpenID Connect configurations
     private String openIDConnectIDTokenBuilderClassName = "org.wso2.carbon.identity.openidconnect.DefaultIDTokenBuilder";
@@ -947,6 +949,10 @@ public class OAuthServerConfiguration {
 
     public boolean isConvertOriginalClaimsFromAssertionsToOIDCDialect() {
         return convertOriginalClaimsFromAssertionsToOIDCDialect;
+    }
+
+    public boolean isReturnOnlyMappedLocalRoles() {
+        return returnOnlyMappedLocalRoles;
     }
 
     private void parseOAuthCallbackHandlers(OMElement callbackHandlersElem) {
@@ -1814,6 +1820,11 @@ public class OAuthServerConfiguration {
                         .getFirstChildWithName(getQNameWithIdentityNS(ConfigElements
                         .OPENID_CONNECT_CONVERT_ORIGINAL_CLAIMS_FROM_ASSERTIONS_TO_OIDCDIALECT)).getText().trim());
             }
+
+            if (IdentityUtil.getProperty(ConfigElements.SEND_ONLY_LOCALLY_MAPPED_ROLES_OF_IDP) != null) {
+                returnOnlyMappedLocalRoles = Boolean
+                        .parseBoolean(IdentityUtil.getProperty(ConfigElements.SEND_ONLY_LOCALLY_MAPPED_ROLES_OF_IDP));
+            }
         }
     }
 
@@ -1877,6 +1888,8 @@ public class OAuthServerConfiguration {
         public static final String OPENID_CONNECT_IDTOKEN_CUSTOM_CLAIM_CALLBACK_HANDLER = "IDTokenCustomClaimsCallBackHandler";
         public static final String OPENID_CONNECT_CONVERT_ORIGINAL_CLAIMS_FROM_ASSERTIONS_TO_OIDCDIALECT =
                 "ConvertOriginalClaimsFromAssertionsToOIDCDialect";
+        public static final String SEND_ONLY_LOCALLY_MAPPED_ROLES_OF_IDP = "FederatedRoleManagement"
+                + ".ReturnOnlyMappedLocalRoles";
         public static final String SUPPORTED_CLAIMS = "OpenIDConnectClaims";
         // Callback handler related configuration elements
         private static final String OAUTH_CALLBACK_HANDLERS = "OAuthCallbackHandlers";
