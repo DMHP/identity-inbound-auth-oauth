@@ -565,7 +565,7 @@ public class SAMLAssertionClaimsCallback implements CustomClaimsCallbackHandler 
                         }
                         for (Map.Entry<String, Object> entry : claims.entrySet()) {
                             String requestedClaims = entry.getKey();
-                            if (GrantType.SAML20_BEARER.toString().equals(grantType)
+                            if ((GrantType.SAML20_BEARER.toString().equals(grantType) || "urn:ietf:params:oauth:grant-type:jwt-bearer".equals(grantType))
                                     && !OAuthServerConfiguration.getInstance()
                                     .isConvertOriginalClaimsFromAssertionsToOIDCDialect()) {
                                 returnClaims.put(entry.getKey(), claims.get(entry.getKey()));
