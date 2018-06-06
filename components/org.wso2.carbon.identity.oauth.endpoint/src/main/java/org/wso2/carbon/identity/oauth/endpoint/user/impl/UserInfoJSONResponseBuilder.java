@@ -40,6 +40,7 @@ import org.wso2.carbon.identity.oauth2.util.OAuth2Util;
 import org.wso2.carbon.registry.core.Resource;
 import org.wso2.carbon.registry.core.exceptions.RegistryException;
 import org.wso2.carbon.registry.core.service.RegistryService;
+import org.wso2.carbon.registry.core.service.TenantRegistryLoader;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -80,7 +81,10 @@ public class UserInfoJSONResponseBuilder implements UserInfoResponseBuilder {
             String tenantDomain = IdentityTenantUtil.getTenantDomain(tenantId);
             carbonContext.setTenantId(tenantId);
             carbonContext.setTenantDomain(tenantDomain);
-            IdentityTenantUtil.getTenantRegistryLoader().loadTenantRegistry(tenantId);
+            TenantRegistryLoader tenantRegistryLoader = IdentityTenantUtil.getTenantRegistryLoader();
+            if (tenantRegistryLoader != null) {
+                tenantRegistryLoader.loadTenantRegistry(tenantId);
+            }
             RegistryService registry = OAuth2ServiceComponentHolder.getRegistryService();
             resource = registry.getConfigSystemRegistry(tenantId).get(OAuthConstants.SCOPE_RESOURCE_PATH);
         } catch (RegistryException e) {
