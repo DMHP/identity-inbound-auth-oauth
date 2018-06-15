@@ -26,8 +26,10 @@ import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.identity.oauth.common.OAuthConstants;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.identity.oauth2.util.OAuth2Util;
+import org.wso2.carbon.identity.oidc.session.DefaultOIDCSessionStateManager;
 import org.wso2.carbon.identity.oidc.session.OIDCSessionConstants;
 import org.wso2.carbon.identity.oidc.session.OIDCSessionManager;
+import org.wso2.carbon.identity.oidc.session.OIDCSessionStateManager;
 import org.wso2.carbon.identity.oidc.session.config.OIDCSessionManagementConfiguration;
 
 import javax.servlet.http.Cookie;
@@ -51,13 +53,16 @@ public class OIDCSessionManagementUtil {
 
     private static final String RANDOM_ALG_SHA1 = "SHA1PRNG";
     private static final String DIGEST_ALG_SHA256 = "SHA-256";
+    private static final String OIDC_SESSION_STATE_MANAGER_CONFIG = "OAuth.OIDCSessionStateManager";
 
     private static final OIDCSessionManager sessionManager = new OIDCSessionManager();
+    private static OIDCSessionStateManager oidcSessionStateManager;
 
     private static final Log log = LogFactory.getLog(OIDCSessionManagementUtil.class);
 
     private OIDCSessionManagementUtil() {
 
+        createOIDCSessionStateManager();
     }
 
     /**
@@ -79,18 +84,7 @@ public class OIDCSessionManagementUtil {
      */
     public static String getSessionStateParam(String clientId, String rpCallBackUrl, String opBrowserState) {
 
-        try {
-            String salt = generateSaltValue();
-
-            String sessionStateDataString =
-                    clientId + " " + getOrigin(rpCallBackUrl) + " " + opBrowserState + " " + salt;
-
-            MessageDigest digest = MessageDigest.getInstance(DIGEST_ALG_SHA256);
-            digest.update(sessionStateDataString.getBytes());
-            return bytesToHex(digest.digest()) + "." + salt;
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("Error while calculating session state.", e);
-        }
+        return oidcSessionStateManager.getSessionStateParam(clientId, rpCallBackUrl, opBrowserState);
     }
 
     /**
@@ -171,13 +165,7 @@ public class OIDCSessionManagementUtil {
      */
     public static Cookie addOPBrowserStateCookie(HttpServletResponse response) {
 
-        Cookie cookie =
-                new Cookie(OIDCSessionConstants.OPBS_COOKIE_ID, UUID.randomUUID().toString());
-        cookie.setSecure(true);
-        cookie.setPath("/");
-
-        response.addCookie(cookie);
-        return cookie;
+        return oidcSessionStateManager.addOPBrowserStateCookie(response);
     }
 
     /**
@@ -307,5 +295,32 @@ public class OIDCSessionManagementUtil {
             result.append(Integer.toString((byt & 0xff) + 0x100, 16).substring(1));
         }
         return result.toString();
+    }
+
+    private void createOIDCSessionStateManager() {
+
+        String oidcSessionStateManagerClassName = IdentityUtil.getProperty(OIDC_SESSION_STATE_MANAGER_CONFIG);
+        if (StringUtils.isNotBlank(oidcSessionStateManagerClassName)) {
+            try {
+                Class clazz =
+                        this.getClass().getClassLoader()
+                                .loadClass(oidcSessionStateManagerClassName);
+                oidcSessionStateManager = (OIDCSessionStateManager) clazz.newInstance();
+
+                if (log.isDebugEnabled()) {
+                    log.debug("An instance of " + oidcSessionStateManagerClassName +
+                            " is created for OIDCSessionManagementUtil.");
+                }
+
+            } catch (ClassNotFoundException | IllegalAccessException | InstantiationException e) {
+                String errorMsg =
+                        "Error when instantiating the OIDCSessionStateManager : " +
+                                oidcSessionStateManagerClassName + ". Defaulting to DefaultOIDCSessionStateManager";
+                log.error(errorMsg, e);
+                oidcSessionStateManager = new DefaultOIDCSessionStateManager();
+            }
+        } else {
+            oidcSessionStateManager = new DefaultOIDCSessionStateManager();
+        }
     }
 }

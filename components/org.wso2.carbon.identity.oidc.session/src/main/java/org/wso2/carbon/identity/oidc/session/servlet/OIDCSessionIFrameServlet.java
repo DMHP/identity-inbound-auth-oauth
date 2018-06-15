@@ -30,7 +30,10 @@ import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 import org.wso2.carbon.identity.oidc.session.OIDCSessionConstants;
 import org.wso2.carbon.identity.oidc.session.OIDCSessionManagerException;
 import org.wso2.carbon.identity.oidc.session.util.OIDCSessionManagementUtil;
+import org.wso2.carbon.utils.CarbonUtils;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
@@ -142,14 +145,24 @@ public class OIDCSessionIFrameServlet extends HttpServlet {
 
     private void loadOPIFrame() {
         opIFrame = new StringBuilder();
-
-        try (InputStream inputStream = getClass().getClassLoader().getResourceAsStream(OP_IFRAME_RESOURCE)) {
+        String opIframeHtmlPath = CarbonUtils.getCarbonHome() + File.separator + "repository"
+                + File.separator + "resources" + File.separator + "identity" + File.separator + "pages" + File
+                .separator + "op_iframe.html";
+        try (InputStream inputStream = new FileInputStream(new File(opIframeHtmlPath))) {
             int i;
             while ((i = inputStream.read()) > 0) {
                 opIFrame.append((char) i);
             }
         } catch (IOException e) {
-            log.error("Failed to load OP IFrame", e);
+            log.error("Failed to load OP IFrame from external directory path: " + opIframeHtmlPath, e);
+            try (InputStream inputStream = getClass().getClassLoader().getResourceAsStream(OP_IFRAME_RESOURCE)) {
+                int i;
+                while ((i = inputStream.read()) > 0) {
+                    opIFrame.append((char) i);
+                }
+            } catch (IOException ex) {
+                log.error("Failed to load OP IFrame", ex);
+            }
         }
     }
 }
