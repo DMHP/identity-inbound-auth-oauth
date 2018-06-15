@@ -91,6 +91,7 @@ public class SAMLAssertionClaimsCallback implements CustomClaimsCallbackHandler 
     private static final String REQUEST_OBJECT = "requestObject";
 
     private static String userAttributeSeparator = IdentityCoreConstants.MULTI_ATTRIBUTE_SEPARATOR_DEFAULT;
+    private static final String JWT_GRANT = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 
     static {
         UserRealm realm;
@@ -565,7 +566,7 @@ public class SAMLAssertionClaimsCallback implements CustomClaimsCallbackHandler 
                         }
                         for (Map.Entry<String, Object> entry : claims.entrySet()) {
                             String requestedClaims = entry.getKey();
-                            if (GrantType.SAML20_BEARER.toString().equals(grantType)
+                            if ((GrantType.SAML20_BEARER.toString().equals(grantType) || JWT_GRANT.equals(grantType))
                                     && !OAuthServerConfiguration.getInstance()
                                     .isConvertOriginalClaimsFromAssertionsToOIDCDialect()) {
                                 returnClaims.put(entry.getKey(), claims.get(entry.getKey()));
