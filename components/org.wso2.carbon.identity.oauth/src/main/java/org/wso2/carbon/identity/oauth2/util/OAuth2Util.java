@@ -764,7 +764,7 @@ public class OAuth2Util {
         long accessTokenIssuedTime = accessTokenDO.getIssuedTime().getTime();
         long accessTokenValidity = calculateValidityInMillis(accessTokenIssuedTime, accessTokenValidityPeriodMillis);
 
-        if (accessTokenValidity > 1000 && refreshTokenValidity > 1000) {
+        if (accessTokenValidity > 1000 && (refreshTokenValidity > 1000 || refreshTokenValidityPeriodMillis < 0)) {
             return accessTokenValidity;
         }
         return 0;
