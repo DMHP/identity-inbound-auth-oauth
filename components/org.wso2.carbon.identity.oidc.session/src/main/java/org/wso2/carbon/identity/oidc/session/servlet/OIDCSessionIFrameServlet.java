@@ -30,9 +30,16 @@ import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 import org.wso2.carbon.identity.oidc.session.OIDCSessionConstants;
 import org.wso2.carbon.identity.oidc.session.OIDCSessionManagerException;
 import org.wso2.carbon.identity.oidc.session.util.OIDCSessionManagementUtil;
+import org.wso2.carbon.utils.CarbonUtils;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import javax.servlet.ServletException;
@@ -141,15 +148,40 @@ public class OIDCSessionIFrameServlet extends HttpServlet {
     }
 
     private void loadOPIFrame() {
-        opIFrame = new StringBuilder();
 
-        try (InputStream inputStream = getClass().getClassLoader().getResourceAsStream(OP_IFRAME_RESOURCE)) {
-            int i;
-            while ((i = inputStream.read()) > 0) {
-                opIFrame.append((char) i);
+        opIFrame = new StringBuilder();
+        Path opIframeHtmlPath = Paths
+                .get(CarbonUtils.getCarbonHome(), "repository", "resources", "identity", "pages", "op_iframe.html");
+
+        if (Files.exists(opIframeHtmlPath)) {
+            try (InputStream inputStream = Files.newInputStream(opIframeHtmlPath)) {
+                int i;
+                while ((i = inputStream.read()) > 0) {
+                    opIFrame.append((char) i);
+                }
+            } catch (IOException e) {
+                log.error("Failed to load OP IFrame", e);
             }
-        } catch (IOException e) {
-            log.error("Failed to load OP IFrame", e);
+        } else {
+            if(log.isDebugEnabled()) {
+                log.debug("Failed to load OP IFrame from external directory path: " + opIframeHtmlPath);
+            }
+            try (InputStream inputStream = getClass().getClassLoader().getResourceAsStream(OP_IFRAME_RESOURCE)) {
+                int i;
+                while ((i = inputStream.read()) > 0) {
+                    opIFrame.append((char) i);
+                }
+            } catch (IOException e) {
+                log.error("Failed to load OP IFrame", e);
+            }
+        }
+    }
+
+    private void readLines(BufferedReader reader, StringBuilder opIFrame) throws IOException {
+
+        String line;
+        while ((line = reader.readLine()) != null) {
+            opIFrame.append(line);
         }
     }
 }
