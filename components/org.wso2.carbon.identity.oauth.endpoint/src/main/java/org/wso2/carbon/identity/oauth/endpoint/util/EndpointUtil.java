@@ -58,7 +58,10 @@ import java.net.URLEncoder;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
+import static org.wso2.carbon.identity.oauth2.util.OAuth2Util.getRedirectURL;
 
 public class EndpointUtil {
 
@@ -234,6 +237,40 @@ public class EndpointUtil {
         return errorPageUrl;
     }
 
+    /**
+     * Returns the error page URL. If appName is not <code>null</code> it will be added as query parameter
+     * to be displayed to the user. If redirect_uri is <code>null</code> the common error page URL will be returned.
+     * If sp name and tenant domain available in the request (as a parameter or using the referer header) those will
+     * be added as query params.
+     *
+     * @param request      HttpServletRequest
+     * @param errorCode    Error Code.
+     * @param errorMessage Error Message.
+     * @param appName      Application Name.
+     * @return redirect error page url.
+     */
+    public static String getErrorPageURL(HttpServletRequest request, String errorCode, String errorMessage, String
+            appName) {
+        String redirectURL =  getErrorPageURL(errorCode, errorMessage, appName);
+        return getRedirectURL(redirectURL, request);
+    }
+
+    /**
+     * Returns the error page URL. If sp name and tenant domain available in the request (as a parameter or using the
+     * referer header) those will be added as query params.
+     *
+     * @param request HttpServletRequest.
+     * @param ex      OAuthProblemException.
+     * @param params  oAuth2 Parameters.
+     * @return redirect error page url
+     */
+    public static String getErrorRedirectURL(HttpServletRequest request, OAuthProblemException ex, OAuth2Parameters
+            params) {
+
+        String redirectURL = getErrorRedirectURL(ex, params);
+        return getRedirectURL(redirectURL, request);
+    }
+
     public static String getErrorRedirectURL(OAuthProblemException ex, OAuth2Parameters params) {
 
         String redirectURL = null;
@@ -358,6 +395,29 @@ public class EndpointUtil {
     }
 
     /**
+     * Returns the login page URL. If sp name and tenant domain available in the request (as a parameter or using the
+     * referer header) those will be added as query params.
+     *
+     * @param request HttpServletRequest
+     * @param clientId Client Id.
+     * @param sessionDataKey Session Data key.
+     * @param forceAuthenticate Is Force Authentication.
+     * @param checkAuthentication Check Authentication.
+     * @param scopes Scopes.
+     * @param reqParams Request Parameters.
+     * @return login page URL>
+     * @throws IdentityOAuth2Exception Identity OAuth2 Exception
+     */
+    public static String getLoginPageURL(HttpServletRequest request, String clientId, String sessionDataKey,
+                                         boolean forceAuthenticate, boolean checkAuthentication, Set<String> scopes,
+                                         Map<String, String[]> reqParams) throws IdentityOAuth2Exception {
+
+        String redirectURL = getLoginPageURL(clientId, sessionDataKey, forceAuthenticate, checkAuthentication, scopes,
+                reqParams);
+        return getRedirectURL(redirectURL, request);
+    }
+
+    /**
      * Returns the consent page URL.
      *
      * @param params
@@ -404,6 +464,10 @@ public class EndpointUtil {
                 } else {
                     consentPage += URLEncoder.encode(params.getApplicationName(), "UTF-8");
                 }
+
+                if (StringUtils.isNotBlank(params.getTenantDomain())) {
+                    consentPage += "&tenantDomain=" + params.getTenantDomain();
+                }
                 consentPage = consentPage + "&" + OAuthConstants.OAuth20Params.SCOPE + "=" + URLEncoder.encode
                         (EndpointUtil.getScope(params), "UTF-8") + "&" + OAuthConstants.SESSION_DATA_KEY_CONSENT
                         + "=" + URLEncoder.encode(sessionDataKeyConsent, "UTF-8") + "&spQueryParams=" + queryString;
@@ -441,5 +505,4 @@ public class EndpointUtil {
     public static String getHostName() {
         return ServerConfiguration.getInstance().getFirstProperty("HostName");
     }
-
 }

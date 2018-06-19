@@ -23,6 +23,8 @@ import org.apache.commons.logging.LogFactory;
 import org.eclipse.equinox.http.helper.ContextPathServletAdaptor;
 import org.osgi.service.component.ComponentContext;
 import org.osgi.service.http.HttpService;
+import org.wso2.carbon.identity.application.mgt.ApplicationManagementService;
+import org.wso2.carbon.identity.oauth2.internal.OAuth2ServiceComponentHolder;
 import org.wso2.carbon.identity.oidc.session.OIDCSessionConstants;
 import org.wso2.carbon.identity.oidc.session.handler.OIDCLogoutHandler;
 import org.wso2.carbon.identity.oidc.session.servlet.OIDCLogoutServlet;
@@ -39,6 +41,9 @@ import javax.servlet.Servlet;
  * @scr.reference name="user.realmservice.default"
  * interface="org.wso2.carbon.user.core.service.RealmService" cardinality="1..1"
  * policy="dynamic" bind="setRealmService" unbind="unsetRealmService"
+ * @scr.reference name="identity.application.management.component"
+ * interface="org.wso2.carbon.identity.application.mgt.ApplicationManagementService" cardinality="1..1"
+ * policy="dynamic" bind="setApplicationMgtService" unbind="unsetApplicationMgtService"
  * @scr.reference name="post.logout.handler"
  * interface="org.wso2.carbon.identity.oidc.session.handler.OIDCLogoutHandler" cardinality="0..n"
  * policy="dynamic" bind="registerOIDCLogoutHandler" unbind="unregisterOIDCLogoutHandler"
@@ -113,6 +118,30 @@ public class OIDCSessionManagementComponent {
             log.debug("Unsetting the Realm Service");
         }
         OIDCSessionManagementComponentServiceHolder.setRealmService(null);
+    }
+
+    /**
+     * Set Application management service implementation
+     *
+     * @param applicationMgtService Application management service
+     */
+    protected void setApplicationMgtService(ApplicationManagementService applicationMgtService) {
+        if (log.isDebugEnabled()) {
+            log.debug("ApplicationManagementService set in OIDC session management bundle");
+        }
+        OAuth2ServiceComponentHolder.setApplicationMgtService(applicationMgtService);
+    }
+
+    /**
+     * Unset Application management service implementation
+     *
+     * @param applicationMgtService Application management service
+     */
+    protected void unsetApplicationMgtService(ApplicationManagementService applicationMgtService) {
+        if (log.isDebugEnabled()) {
+            log.debug("ApplicationManagementService unset in OIDC session management bundle");
+        }
+        OAuth2ServiceComponentHolder.setApplicationMgtService(null);
     }
 
     protected void registerOIDCLogoutHandler(OIDCLogoutHandler oidcLogoutHandler) {
