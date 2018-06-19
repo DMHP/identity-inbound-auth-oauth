@@ -46,9 +46,8 @@ public class DefaultOIDCSessionStateManager implements OIDCSessionStateManager {
 
         try {
             String salt = generateSaltValue();
-
-            String sessionStateDataString =
-                    clientId + " " + getOrigin(rpCallBackUrl) + " " + opBrowserState + " " + salt;
+            String sessionStateDataString = clientId + " " + getOrigin(rpCallBackUrl) + " " + opBrowserState + " " +
+                    salt;
 
             MessageDigest digest = MessageDigest.getInstance(DIGEST_ALG_SHA256);
             digest.update(sessionStateDataString.getBytes());
