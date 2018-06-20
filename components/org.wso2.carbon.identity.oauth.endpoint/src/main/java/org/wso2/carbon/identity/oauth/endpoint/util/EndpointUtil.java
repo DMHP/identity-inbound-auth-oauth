@@ -43,8 +43,10 @@ import org.wso2.carbon.identity.oauth.cache.SessionDataCache;
 import org.wso2.carbon.identity.oauth.cache.SessionDataCacheEntry;
 import org.wso2.carbon.identity.oauth.cache.SessionDataCacheKey;
 import org.wso2.carbon.identity.oauth.common.OAuthConstants;
+import org.wso2.carbon.identity.oauth.common.exception.InvalidOAuthClientException;
 import org.wso2.carbon.identity.oauth.common.exception.OAuthClientException;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
+import org.wso2.carbon.identity.oauth.dao.OAuthAppDO;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 import org.wso2.carbon.identity.oauth2.OAuth2Service;
 import org.wso2.carbon.identity.oauth2.OAuth2TokenValidationService;
@@ -52,6 +54,7 @@ import org.wso2.carbon.identity.oauth2.model.OAuth2Parameters;
 import org.wso2.carbon.identity.oauth2.util.OAuth2Util;
 import org.wso2.carbon.identity.webfinger.DefaultWebFingerProcessor;
 import org.wso2.carbon.identity.webfinger.WebFingerProcessor;
+import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
@@ -465,9 +468,7 @@ public class EndpointUtil {
                     consentPage += URLEncoder.encode(params.getApplicationName(), "UTF-8");
                 }
 
-                if (StringUtils.isNotBlank(params.getTenantDomain())) {
-                    consentPage += "&tenantDomain=" + params.getTenantDomain();
-                }
+                consentPage += "&tenantDomain=" + getTenantDomainFromClientId(params.getClientId());
                 consentPage = consentPage + "&" + OAuthConstants.OAuth20Params.SCOPE + "=" + URLEncoder.encode
                         (EndpointUtil.getScope(params), "UTF-8") + "&" + OAuthConstants.SESSION_DATA_KEY_CONSENT
                         + "=" + URLEncoder.encode(sessionDataKeyConsent, "UTF-8") + "&spQueryParams=" + queryString;
@@ -504,5 +505,16 @@ public class EndpointUtil {
 
     public static String getHostName() {
         return ServerConfiguration.getInstance().getFirstProperty("HostName");
+    }
+
+    private static String getTenantDomainFromClientId(String clientId) {
+
+        try {
+            OAuthAppDO oAuthAppDO = OAuth2Util.getAppInformationByClientId(clientId);
+            return OAuth2Util.getTenantDomainOfOauthApp(oAuthAppDO);
+        } catch (IdentityOAuth2Exception | InvalidOAuthClientException e) {
+            log.error("Error while getting oauth app for client Id: " + clientId, e);
+            return MultitenantConstants.SUPER_TENANT_DOMAIN_NAME;
+        }
     }
 }
