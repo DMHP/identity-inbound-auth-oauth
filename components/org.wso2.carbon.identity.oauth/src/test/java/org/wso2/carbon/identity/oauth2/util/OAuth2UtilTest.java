@@ -22,19 +22,44 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.testng.PowerMockObjectFactory;
 import org.testng.Assert;
 import org.testng.IObjectFactory;
+import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.ObjectFactory;
 import org.testng.annotations.Test;
+import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
-import org.wso2.carbon.identity.oauth.cache.OAuthCache;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
+import org.wso2.carbon.identity.oauth2.model.AccessTokenDO;
 
+import java.sql.Timestamp;
+
+import static org.mockito.Matchers.anyString;
 import static org.powermock.api.mockito.PowerMockito.mock;
 import static org.powermock.api.mockito.PowerMockito.mockStatic;
 import static org.powermock.api.mockito.PowerMockito.when;
+import static org.testng.Assert.assertTrue;
 
 @PrepareForTest({OAuthServerConfiguration.class, IdentityUtil.class})
 public class OAuth2UtilTest {
+
+    private String clientId = "dummyClientId";
+    private String authorizationCode = "testAuthorizationCode";
+    private String tokenType = "testTokenType";
+    private String[] scopeArraySorted = new String[]{"scope1", "scope2", "scope3"};
+    private AuthenticatedUser authzUser;
+    private Timestamp issuedTime;
+    private Timestamp refreshTokenIssuedTime;
+    private long validityPeriodInMillis;
+    private Boolean isTokenLoggable = false;
+
+    @BeforeMethod
+    public void setUp() throws Exception {
+
+        authzUser = new AuthenticatedUser();
+        issuedTime = new Timestamp(System.currentTimeMillis());
+        refreshTokenIssuedTime = new Timestamp(System.currentTimeMillis());
+        validityPeriodInMillis = 3600000L;
+    }
 
     @DataProvider(name = "TestGetPartitionedTableByUserStoreDataProvider")
     public Object[][] getPartitionedTableByUserStoreData() {
@@ -46,6 +71,15 @@ public class OAuth2UtilTest {
                 {"IDN_OAUTH2_ACCESS_TOKEN_SCOPE", "H2", "IDN_OAUTH2_ACCESS_TOKEN_SCOPE_A"},
                 {null, "H2", null},
                 {"IDN_OAUTH2_ACCESS_TOKEN", null, "IDN_OAUTH2_ACCESS_TOKEN"}
+        };
+    }
+
+    @DataProvider(name = "TestGetTokenExpireTimeMillisDataProvider")
+    public Object[][] getTokenExpireTimeMillisData() {
+        return new Object[][] {
+                // Refresh Token validity period
+                {3600000L},
+                {-1000L} // Refresh token validity period is infinite
         };
     }
 
@@ -63,6 +97,18 @@ public class OAuth2UtilTest {
         when(IdentityUtil.getPrimaryDomainName()).thenReturn("PRIMARY");
 
         Assert.assertEquals(OAuth2Util.getPartitionedTableByUserStore(tableName, userstoreDomain), partionedTableName);
+    }
+
+    @Test(dataProvider = "TestGetTokenExpireTimeMillisDataProvider")
+    public void testGetTokenExpireTimeMillis(long refreshTokenValidityPeriodInMillis) throws Exception {
+
+        mockStatic(IdentityUtil.class);
+        when(IdentityUtil.isTokenLoggable(anyString())).thenReturn(isTokenLoggable);
+        AccessTokenDO accessTokenDO = new AccessTokenDO(clientId, authzUser, scopeArraySorted, issuedTime,
+                                                        refreshTokenIssuedTime, validityPeriodInMillis,
+                                                        refreshTokenValidityPeriodInMillis, tokenType,
+                                                        authorizationCode);
+        assertTrue(OAuth2Util.getTokenExpireTimeMillis(accessTokenDO) > 1000);
     }
 
     @ObjectFactory
