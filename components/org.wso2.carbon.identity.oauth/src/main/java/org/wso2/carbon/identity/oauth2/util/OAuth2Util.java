@@ -117,10 +117,13 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.servlet.http.HttpServletRequest;
 import javax.xml.namespace.QName;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
+
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.RequestParams.TENANT_DOMAIN;
 
 /**
  * Utility methods for OAuth 2.0 implementation
@@ -235,6 +238,11 @@ public class OAuth2Util {
     private static final String REFRESH_TOKEN_HASH = "REFRESH_TOKEN_HASH";
     private static final String AUTHORIZATION_CODE_HASH = "AUTHORIZATION_CODE_HASH";
     private static final String CONSUMER_SECRET_HASH = "CONSUMER_SECRET_HASH";
+
+    private static final String REQUEST_PARAM_SP = "sp";
+    private static final String QUERY_SEPARATOR = "&";
+    private static final String EQUAL = "=";
+    private static final String REQUEST_PARAM_APPLICATION = "application";
 
     private OAuth2Util() {
 
@@ -2090,6 +2098,92 @@ public class OAuth2Util {
     public static boolean isHashColumnsAvailable() throws IdentityOAuth2Exception {
 
         return isTokenHashColumnAvailable() && isAuthzCodeHashColumnAvailable() && isConsumerSecretHashColumnAvailable();
+    }
+
+    /**
+     *
+     * @param redirectURL
+     * @param request
+     * @return
+     */
+    public static String getRedirectURL(String redirectURL, HttpServletRequest request) {
+
+        //Not required to append query params if redirectURI is empty or null.
+        if (StringUtils.isBlank(redirectURL)) {
+            return redirectURL;
+        }
+
+        String spName = (String) request.getAttribute(REQUEST_PARAM_SP);
+        String tenantDomain = (String) request.getAttribute(TENANT_DOMAIN);
+        if (StringUtils.isBlank(spName)) {
+            spName = getServiceProviderNameByReferer(request);
+        }
+
+        if (StringUtils.isBlank(tenantDomain)) {
+            tenantDomain = getTenantDomainByReferer(request);
+        }
+
+        try {
+            if (StringUtils.isNotBlank(spName)) {
+                redirectURL = appendUri(redirectURL, REQUEST_PARAM_SP + "=" + spName);
+            }
+
+            if (StringUtils.isNotBlank(tenantDomain)) {
+                redirectURL = appendUri(redirectURL, TENANT_DOMAIN + "=" + tenantDomain);
+            }
+        } catch (URISyntaxException e) {
+            if (log.isDebugEnabled()) {
+                log.debug("URI syntax exception while appending sp_name parameter" + spName, e);
+            }
+            return redirectURL;
+        }
+
+        return redirectURL;
+    }
+
+    private static String getTenantDomainByReferer(HttpServletRequest request) {
+
+        String tenantDomain = null;
+        String refererHeader = request.getHeader("referer");
+        if (StringUtils.isNotBlank(refererHeader)) {
+            String[] queryParams = refererHeader.split(QUERY_SEPARATOR);
+            for (String queryParam : queryParams) {
+                if (queryParam.contains(TENANT_DOMAIN + EQUAL)) {
+                    tenantDomain = queryParam.substring(queryParam.lastIndexOf(EQUAL) + 1);
+                    break;
+                }
+            }
+        }
+        return tenantDomain;
+    }
+
+    private static String getServiceProviderNameByReferer(HttpServletRequest request) {
+
+        String serviceProviderName = null;
+        String refererHeader = request.getHeader("referer");
+        if (StringUtils.isNotBlank(refererHeader)) {
+            String[] queryParams = refererHeader.split(QUERY_SEPARATOR);
+            for (String queryParam : queryParams) {
+                if (queryParam.contains(REQUEST_PARAM_SP + EQUAL) || queryParam.contains(REQUEST_PARAM_APPLICATION + EQUAL)) {
+                    serviceProviderName = queryParam.substring(queryParam.lastIndexOf(EQUAL) + 1);
+                    break;
+                }
+            }
+        }
+        return serviceProviderName;
+    }
+
+    private static String appendUri(String uri, String appendQuery) throws URISyntaxException {
+
+        URI oldUri = new URI(uri);
+        String newQuery = oldUri.getQuery();
+        if (newQuery == null) {
+            newQuery = appendQuery;
+        } else {
+            newQuery += "&" + appendQuery;
+        }
+        return new URI(oldUri.getScheme(), oldUri.getAuthority(), oldUri.getPath(), newQuery, oldUri.getFragment())
+                .toString();
     }
 
 }
