@@ -110,8 +110,7 @@ import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response;
 
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.REQUEST_PARAM_SP;
-import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.RequestParams
-        .TENANT_DOMAIN;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.RequestParams.TENANT_DOMAIN;
 import static org.wso2.carbon.identity.core.util.IdentityUtil.convertPEMEncodedContentToCertificate;
 
 @Path("/authorize")
@@ -273,7 +272,8 @@ public class OAuth2AuthzEndpoint {
                     sessionDataCacheEntry.setAuthTime(authTime);
                 }
                 OAuth2Parameters oauth2Params = sessionDataCacheEntry.getoAuth2Parameters();
-                setSPAttributeToRequest(request, oauth2Params.getApplicationName(), oauth2Params.getTenantDomain());
+                String tenantDomain = getTenantDomainFromClientId(oauth2Params.getClientId());
+                setSPAttributeToRequest(request, oauth2Params.getApplicationName(), tenantDomain);
 
                 AuthenticationResult authnResult = getAuthenticationResult(request, sessionDataKeyFromLogin);
                 if (authnResult != null) {
@@ -357,7 +357,8 @@ public class OAuth2AuthzEndpoint {
                 long authTime = getAuthenticatedTimeFromCookie(cookie);
                 sessionDataCacheEntry = resultFromConsent;
                 OAuth2Parameters oauth2Params = sessionDataCacheEntry.getoAuth2Parameters();
-                setSPAttributeToRequest(request, oauth2Params.getApplicationName(), oauth2Params.getTenantDomain());
+                setSPAttributeToRequest(request, oauth2Params.getApplicationName(), getTenantDomainFromClientId
+                        (oauth2Params.getClientId()));
                 if (authTime > 0) {
                     oauth2Params.setAuthTime(authTime);
                 }
@@ -483,6 +484,17 @@ public class OAuth2AuthzEndpoint {
             }
 
             PrivilegedCarbonContext.endTenantFlow();
+        }
+    }
+
+    private String getTenantDomainFromClientId(String clientId) {
+
+        try {
+            OAuthAppDO oAuthAppDO = OAuth2Util.getAppInformationByClientId(clientId);
+            return OAuth2Util.getTenantDomainOfOauthApp(oAuthAppDO);
+        } catch (IdentityOAuth2Exception | InvalidOAuthClientException e) {
+            log.error("Error while getting oauth app for client Id: " + clientId, e);
+            return MultitenantConstants.SUPER_TENANT_DOMAIN_NAME;
         }
     }
 
