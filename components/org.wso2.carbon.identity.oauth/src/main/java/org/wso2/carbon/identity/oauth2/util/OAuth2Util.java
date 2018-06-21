@@ -87,8 +87,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.security.Key;
@@ -2123,19 +2125,12 @@ public class OAuth2Util {
             tenantDomain = getTenantDomainByReferer(request);
         }
 
-        try {
-            if (StringUtils.isNotBlank(spName)) {
-                redirectURL = appendUri(redirectURL, REQUEST_PARAM_SP + "=" + spName);
-            }
+        if (StringUtils.isNotBlank(spName)) {
+            redirectURL = appendUri(redirectURL, REQUEST_PARAM_SP, spName);
+        }
 
-            if (StringUtils.isNotBlank(tenantDomain)) {
-                redirectURL = appendUri(redirectURL, TENANT_DOMAIN + "=" + tenantDomain);
-            }
-        } catch (URISyntaxException e) {
-            if (log.isDebugEnabled()) {
-                log.debug("URI syntax exception while appending sp_name parameter" + spName, e);
-            }
-            return redirectURL;
+        if (StringUtils.isNotBlank(tenantDomain)) {
+            redirectURL = appendUri(redirectURL, TENANT_DOMAIN, tenantDomain);
         }
 
         return redirectURL;
@@ -2173,17 +2168,21 @@ public class OAuth2Util {
         return serviceProviderName;
     }
 
-    private static String appendUri(String uri, String appendQuery) throws URISyntaxException {
+    private static String appendUri(String uri, String key, String value) {
 
-        URI oldUri = new URI(uri);
-        String newQuery = oldUri.getQuery();
-        if (newQuery == null) {
-            newQuery = appendQuery;
-        } else {
-            newQuery += "&" + appendQuery;
+        if (StringUtils.isNotBlank(uri) && StringUtils.isNotBlank(key) && StringUtils.isNotBlank(value)) {
+
+            try {
+                if (uri.contains("?")) {
+                    uri += "&" + key + "=" + URLEncoder.encode(value, "UTF-8");
+                } else {
+                    uri += "?" + key + "=" + URLEncoder.encode(value, "UTF-8");
+                }
+            } catch (UnsupportedEncodingException e) {
+                log.error("Error while URL encoding: " + value, e);
+            }
         }
-        return new URI(oldUri.getScheme(), oldUri.getAuthority(), oldUri.getPath(), newQuery, oldUri.getFragment())
-                .toString();
+        return uri;
     }
 
 }
