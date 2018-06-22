@@ -24,7 +24,6 @@ import org.eclipse.equinox.http.helper.ContextPathServletAdaptor;
 import org.osgi.service.component.ComponentContext;
 import org.osgi.service.http.HttpService;
 import org.wso2.carbon.identity.application.mgt.ApplicationManagementService;
-import org.wso2.carbon.identity.oauth2.internal.OAuth2ServiceComponentHolder;
 import org.wso2.carbon.identity.oidc.session.OIDCSessionConstants;
 import org.wso2.carbon.identity.oidc.session.handler.OIDCLogoutHandler;
 import org.wso2.carbon.identity.oidc.session.servlet.OIDCLogoutServlet;
@@ -129,7 +128,7 @@ public class OIDCSessionManagementComponent {
         if (log.isDebugEnabled()) {
             log.debug("ApplicationManagementService set in OIDC session management bundle");
         }
-        OAuth2ServiceComponentHolder.setApplicationMgtService(applicationMgtService);
+        OIDCSessionManagementComponentServiceHolder.setApplicationMgtService(applicationMgtService);
     }
 
     /**
@@ -141,7 +140,7 @@ public class OIDCSessionManagementComponent {
         if (log.isDebugEnabled()) {
             log.debug("ApplicationManagementService unset in OIDC session management bundle");
         }
-        OAuth2ServiceComponentHolder.setApplicationMgtService(null);
+        OIDCSessionManagementComponentServiceHolder.setApplicationMgtService(null);
     }
 
     protected void registerOIDCLogoutHandler(OIDCLogoutHandler oidcLogoutHandler) {
