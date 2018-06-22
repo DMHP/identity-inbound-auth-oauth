@@ -258,7 +258,7 @@ public class OIDCLogoutServlet extends HttpServlet {
 
         String spName = null;
         try {
-            spName = OIDCSessionManagementComponentServiceHolder.getApplicationMgtService().getInstance()
+            spName = OIDCSessionManagementComponentServiceHolder.getApplicationMgtService()
                     .getServiceProviderNameByClientId(clientId, IdentityApplicationConstants.OAuth2.NAME, tenantDomain);
         } catch (IdentityApplicationManagementException e) {
             log.error("Error while getting Service provider name for client Id:" + clientId + " in tenant: " + tenantDomain, e);
