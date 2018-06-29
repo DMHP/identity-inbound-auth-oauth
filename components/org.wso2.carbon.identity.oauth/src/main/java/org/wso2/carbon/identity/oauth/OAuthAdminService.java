@@ -221,12 +221,16 @@ public class OAuthAdminService extends AbstractAdmin {
                     throw new IdentityOAuthAdminException("Callback Url is required for Code or Implicit grant types");
                 }
                 app.setCallbackUrl(application.getCallbackUrl());
-                if (application.getOauthConsumerKey() == null) {
+                if (StringUtils.isEmpty(application.getOauthConsumerKey())) {
                     app.setOauthConsumerKey(OAuthUtil.getRandomNumber());
                     app.setOauthConsumerSecret(OAuthUtil.getRandomNumber());
                 } else {
                     app.setOauthConsumerKey(application.getOauthConsumerKey());
-                    app.setOauthConsumerSecret(application.getOauthConsumerSecret());
+                    if (StringUtils.isEmpty(application.getOauthConsumerSecret())) {
+                        app.setOauthConsumerSecret(OAuthUtil.getRandomNumber());
+                    } else {
+                        app.setOauthConsumerSecret(application.getOauthConsumerSecret());
+                    }
                 }
 
                 AuthenticatedUser user = new AuthenticatedUser();
