@@ -17,7 +17,6 @@
  */
 
 package org.wso2.carbon.identity.oauth2.token.handlers.grant;
-
 import org.apache.axiom.util.base64.Base64Utils;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.Charsets;
@@ -222,13 +221,27 @@ public class RefreshGrantHandler extends AbstractAuthorizationGrantHandler {
 
         // whether to renew the refresh token or not
         boolean renew = OAuthServerConfiguration.getInstance().isRefreshTokenRenewalEnabled();
+
+        String clientId = oauth2AccessTokenReqDTO.getClientId();
+        // To get registry defined value for property renewRefreshToken
+        String result = spTimeConfigObj.getRenewRefreshToken();
+        if (StringUtils.isNotEmpty(result)) {
+            // Checking whether provided property value is valid
+            if (Boolean.parseBoolean(result)) {
+                renew = true;
+            } else if ("false".equalsIgnoreCase(result)) {
+                renew = false;
+            } else {
+                log.warn("Wrong renew RefreshToken value " + result + ". The value should be true/false. Therefore " +
+                        "global configuration is take into consideration and the global value is " + renew);
+            }
+        }
+
         if (!renew) {
             // if refresh token renewal not enabled, we use existing one else we issue a new refresh token
             refreshToken = oauth2AccessTokenReqDTO.getRefreshToken();
             refreshTokenIssuedTime = refreshTokenValidationDataDO.getIssuedTime();
         }
-
-
 
         Timestamp timestamp = new Timestamp(new Date().getTime());
 
@@ -270,7 +283,6 @@ public class RefreshGrantHandler extends AbstractAuthorizationGrantHandler {
             tokenType = OAuthConstants.UserType.APPLICATION;
         }
 
-        String clientId = oauth2AccessTokenReqDTO.getClientId();
 
         // set the validity period. this is needed by downstream handlers.
         // if this is set before - then this will override it by the calculated new value.
