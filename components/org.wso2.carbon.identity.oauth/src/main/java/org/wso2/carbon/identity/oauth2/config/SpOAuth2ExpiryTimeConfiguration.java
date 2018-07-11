@@ -28,6 +28,7 @@ public class SpOAuth2ExpiryTimeConfiguration {
     private Long refreshTokenExpiryTime;
     private Long applicationAccessTokenExpiryTime;
     private Long idTokenExpiryTime;
+    private String renewRefreshToken;
 
     public String getConsumerKey() {
         return consumerKey;
@@ -70,4 +71,15 @@ public class SpOAuth2ExpiryTimeConfiguration {
 
         return idTokenExpiryTime;
     }
+
+    public void setRenewRefreshToken(String renewRefreshToken) {
+
+        this.renewRefreshToken = renewRefreshToken;
+    }
+
+    public String getRenewRefreshToken() {
+
+        return renewRefreshToken;
+    }
+
 }

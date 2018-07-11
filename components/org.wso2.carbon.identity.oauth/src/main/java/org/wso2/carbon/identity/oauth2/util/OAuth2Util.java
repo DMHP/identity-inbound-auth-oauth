@@ -220,7 +220,7 @@ public class OAuth2Util {
      */
     public static final String ID_TOKEN_EXPIRY_TIME_IN_MILLISECONDS = "idTokenExpireTime";
 
-
+    public static final String RENEW_REFRESH_TOKEN = "renewRefreshToken";
 
     private static Log log = LogFactory.getLog(OAuth2Util.class);
     private static boolean cacheEnabled = OAuthServerConfiguration.getInstance().isCacheEnabled();
@@ -1393,6 +1393,14 @@ public class OAuth2Util {
                                     "Given value: '%s', Expected a long value.", consumerKey, tenantId,
                                     spTimeObject.get(ID_TOKEN_EXPIRY_TIME_IN_MILLISECONDS).toString());
                             log.error(errorMsg, e);
+                        }
+                    }
+                    if (spTimeObject.has(RENEW_REFRESH_TOKEN) && !spTimeObject.isNull(RENEW_REFRESH_TOKEN)) {
+                        spTokenTimeObject.setRenewRefreshToken(spTimeObject.get(RENEW_REFRESH_TOKEN).toString());
+                        if (log.isDebugEnabled()) {
+                            log.debug("Service provider level condition of renew refreh token : " +
+                                    spTimeObject.get(RENEW_REFRESH_TOKEN).toString() +
+                                    " for application id : " + consumerKey);
                         }
                     }
                 }
