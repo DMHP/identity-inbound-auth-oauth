@@ -249,9 +249,13 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
 
         LinkedHashSet acrValue = new LinkedHashSet();
         // AuthorizationCode only available for authorization code grant type
-        if (request.getProperty(AUTHORIZATION_CODE) != null) {
-            AuthorizationGrantCacheEntry authorizationGrantCacheEntry = getAuthorizationGrantCacheEntryFromToken
-                    (tokenRespDTO.getAccessToken());
+        if (getAuthorizationCode(request) != null) {
+            // We have to use the cache entry against the code (not the token although they contain the same value)
+            // since it contains values such as 'nonce' unique to the request. Relying on the cache entry against is not
+            // possible since different authorization requests might end up with the same access token.
+            AuthorizationGrantCacheEntry authorizationGrantCacheEntry =
+                    getAuthorizationGrantCacheEntryByCode(getAuthorizationCode(request));
+
             if (authorizationGrantCacheEntry != null) {
                 nonceValue = authorizationGrantCacheEntry.getNonceValue();
                 acrValue = authorizationGrantCacheEntry.getAcrValue();
@@ -323,6 +327,14 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
             return new PlainJWT(jwtClaimsSet).serialize();
         }
         return signJWT(jwtClaimsSet, request);
+    }
+
+    private String getAuthorizationCode(OAuthTokenReqMessageContext request) {
+        if (request.getProperty(AUTHORIZATION_CODE) == null) {
+            return null;
+        } else {
+            return (String) request.getProperty(AUTHORIZATION_CODE);
+        }
     }
 
 
@@ -583,15 +595,15 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
 
 
     /**
-     * Get AuthorizationGrantCacheEntry from access token.
+     * Get AuthorizationGrantCacheEntry from authorization code.
      *
-     * @param accessToken
+     * @param authorizationCode
      * @return AuthorizationGrantCacheEntry contains user attributes and nonce value
      */
-    private AuthorizationGrantCacheEntry getAuthorizationGrantCacheEntryFromToken(String accessToken) {
+    private AuthorizationGrantCacheEntry getAuthorizationGrantCacheEntryByCode(String authorizationCode) {
 
-        AuthorizationGrantCacheKey authorizationGrantCacheKey = new AuthorizationGrantCacheKey(accessToken);
-        return AuthorizationGrantCache.getInstance().getValueFromCacheByToken(authorizationGrantCacheKey);
+        AuthorizationGrantCacheKey authorizationGrantCacheKey = new AuthorizationGrantCacheKey(authorizationCode);
+        return AuthorizationGrantCache.getInstance().getValueFromCacheByCode(authorizationGrantCacheKey);
     }
 
     private long getAccessTokenIssuedTime(String accessToken, OAuthTokenReqMessageContext request)

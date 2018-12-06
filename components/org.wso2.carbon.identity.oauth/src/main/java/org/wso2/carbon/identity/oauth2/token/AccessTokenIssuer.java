@@ -319,9 +319,6 @@ public class AccessTokenIssuer {
                     tokReqMsgCtx.getAuthorizedUser() + " and scopes: " + tokenRespDTO.getAuthorizedScopes());
         }
 
-        if (tokenReqDTO.getGrantType().equals(GrantType.AUTHORIZATION_CODE.toString())) {
-            addUserAttributesToCache(tokenReqDTO, tokenRespDTO);
-        }
 
         if (tokReqMsgCtx.getScope() != null && OAuth2Util.isOIDCAuthzRequest(tokReqMsgCtx.getScope())) {
             if (log.isDebugEnabled()) {
@@ -336,6 +333,11 @@ public class AccessTokenIssuer {
                 tokenRespDTO = handleError(OAuth2ErrorCodes.SERVER_ERROR, "Server Error", tokenReqDTO);
                 return tokenRespDTO;
             }
+        }
+
+        if (tokenReqDTO.getGrantType().equals(GrantType.AUTHORIZATION_CODE.toString())) {
+            addUserAttributesAgainstAccessToken(tokenReqDTO, tokenRespDTO);
+            clearCacheEntryAgainstCode(getAuthorizationCode(tokenReqDTO));
         }
 
         return tokenRespDTO;
@@ -406,15 +408,17 @@ public class AccessTokenIssuer {
     }
 
     /**
-     * Add user attributes to cache.
+     * Copies the cache entry against the authorization code and adds an entry against the access token. This is done to
+     * reuse the calculated user claims for subsequent usages such as user info calls.
      *
      * @param tokenReqDTO
      * @param tokenRespDTO
      */
-    private void addUserAttributesToCache(OAuth2AccessTokenReqDTO tokenReqDTO, OAuth2AccessTokenRespDTO tokenRespDTO) {
+    private void addUserAttributesAgainstAccessToken(OAuth2AccessTokenReqDTO tokenReqDTO,
+                                                     OAuth2AccessTokenRespDTO tokenRespDTO) {
 
-        AuthorizationGrantCacheKey oldCacheKey = new AuthorizationGrantCacheKey(tokenReqDTO.getAuthorizationCode());
-        //checking getUserAttributesId value of cacheKey before retrieve entry from cache as it causes to NPE
+        AuthorizationGrantCacheKey oldCacheKey = new AuthorizationGrantCacheKey(getAuthorizationCode(tokenReqDTO));
+        // Checking getUserAttributesId value of cacheKey before retrieve entry from cache as it could causes to NPE.
         if (oldCacheKey.getUserAttributesId() != null) {
             AuthorizationGrantCacheEntry authorizationGrantCacheEntry =
                     AuthorizationGrantCache.getInstance().getValueFromCacheByCode(oldCacheKey);
@@ -430,9 +434,26 @@ public class AccessTokenIssuer {
                     }
                 }
                 AuthorizationGrantCache.getInstance().addToCacheByToken(newCacheKey, authorizationGrantCacheEntry);
-                AuthorizationGrantCache.getInstance().clearCacheEntryByCode(oldCacheKey);
             }
         }
+    }
+
+    /**
+     * Clear user/request attributes stored against the authorizationcode.
+     *
+     * @param authorizationCode
+     */
+    private void clearCacheEntryAgainstCode(String authorizationCode) {
+
+        AuthorizationGrantCacheKey oldCacheKey = new AuthorizationGrantCacheKey(authorizationCode);
+        // Checking getUserAttributesId value of cacheKey before retrieve entry from cache as it could cause NPE.
+        if (oldCacheKey.getUserAttributesId() != null) {
+            AuthorizationGrantCache.getInstance().clearCacheEntryByCode(oldCacheKey);
+        }
+    }
+
+    private String getAuthorizationCode(OAuth2AccessTokenReqDTO tokenReqDTO) {
+        return tokenReqDTO.getAuthorizationCode();
     }
 
     /**
