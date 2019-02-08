@@ -26,6 +26,7 @@ import org.wso2.carbon.base.MultitenantConstants;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
 import org.wso2.carbon.identity.application.common.IdentityApplicationManagementException;
 import org.wso2.carbon.identity.application.common.model.ServiceProvider;
+import org.wso2.carbon.identity.base.IdentityException;
 import org.wso2.carbon.identity.base.IdentityRuntimeException;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.oauth.internal.OAuthComponentServiceHolder;
@@ -107,7 +108,16 @@ public class PasswordGrantHandler extends AbstractAuthorizationGrantHandler {
             }
 
         } catch (UserStoreException e) {
-            throw new IdentityOAuth2Exception(e.getMessage(), e);
+            String message = e.getMessage();
+            if (!(e.getCause() instanceof IdentityException)) {
+                throw new IdentityOAuth2Exception(message, e);
+            }
+            IdentityException identityException = (IdentityException) (e.getCause());
+            // Set error code to message if available.
+            if (StringUtils.isNotBlank(identityException.getErrorCode())) {
+                message = identityException.getErrorCode() + " " + e.getMessage();
+            }
+            throw new IdentityOAuth2Exception(message, e);
         }
         if (authStatus) {
             if (!username.contains(CarbonConstants.DOMAIN_SEPARATOR) && StringUtils.isNotBlank(UserCoreUtil
