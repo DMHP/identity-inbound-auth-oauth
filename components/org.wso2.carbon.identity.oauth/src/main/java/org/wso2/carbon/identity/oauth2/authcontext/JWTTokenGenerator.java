@@ -354,6 +354,27 @@ public class JWTTokenGenerator implements AuthorizationContextTokenGenerator {
      * @param signedJWT
      * @param tenantDomain
      * @param tenantId
+     * @return
+     * @throws IdentityOAuth2Exception
+     */
+    protected JWT signJWT(SignedJWT signedJWT, String tenantDomain, int tenantId)
+            throws IdentityOAuth2Exception {
+
+        if (JWSAlgorithm.RS256.equals(signatureAlgorithm) || JWSAlgorithm.RS384.equals(signatureAlgorithm) ||
+                JWSAlgorithm.RS512.equals(signatureAlgorithm)) {
+            return signJWTWithRSA(signedJWT, signatureAlgorithm, tenantDomain, tenantId);
+        }
+        log.error("UnSupported Signature Algorithm");
+        throw new IdentityOAuth2Exception("UnSupported Signature Algorithm");
+    }
+
+    /**
+     * Overloaded function of Generic Signing function.
+     * Support sign with HMAC
+     *
+     * @param signedJWT
+     * @param tenantDomain
+     * @param tenantId
      * @param appDO
      * @return
      * @throws IdentityOAuth2Exception
