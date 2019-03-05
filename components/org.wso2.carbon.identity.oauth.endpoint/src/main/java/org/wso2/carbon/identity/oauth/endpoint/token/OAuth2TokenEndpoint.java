@@ -30,6 +30,7 @@ import org.apache.oltu.oauth2.common.message.OAuthResponse;
 import org.apache.oltu.oauth2.common.message.types.GrantType;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.oauth.IdentityOAuthAdminException;
+import org.wso2.carbon.identity.oauth.OAuthAdminService;
 import org.wso2.carbon.identity.oauth.common.OAuth2ErrorCodes;
 import org.wso2.carbon.identity.oauth.common.OAuthConstants;
 import org.wso2.carbon.identity.oauth.common.exception.InvalidOAuthClientException;
@@ -80,7 +81,7 @@ public class OAuth2TokenEndpoint {
             HttpServletRequestWrapper httpRequest = new OAuthRequestWrapper(request, paramMap);
 
             String consumerKey = null;
-            OAuthAppDAO oAuthAppDAO = new OAuthAppDAO();
+            OAuthAdminService oAuthAdminService = new OAuthAdminService();
             try {
                 if (StringUtils.isNotEmpty(httpRequest.getParameter(OAuth.OAUTH_CLIENT_ID))) {
                     consumerKey = httpRequest.getParameter(OAuth.OAUTH_CLIENT_ID);
@@ -89,7 +90,7 @@ public class OAuth2TokenEndpoint {
                 }
 
                 if (StringUtils.isNotEmpty(consumerKey)) {
-                    String appState = oAuthAppDAO.getConsumerAppState(consumerKey);
+                    String appState = oAuthAdminService.getOauthApplicationState(consumerKey);
                     if (StringUtils.isEmpty(appState)) {
                         if (log.isDebugEnabled()) {
                             log.debug("A valid OAuth client could not be found for client_id:" + consumerKey);

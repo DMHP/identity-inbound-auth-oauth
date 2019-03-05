@@ -50,6 +50,7 @@ import org.wso2.carbon.identity.application.common.model.ServiceProvider;
 import org.wso2.carbon.identity.application.common.model.ServiceProviderProperty;
 import org.wso2.carbon.identity.application.mgt.ApplicationManagementService;
 import org.wso2.carbon.identity.oauth.IdentityOAuthAdminException;
+import org.wso2.carbon.identity.oauth.OAuthAdminService;
 import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCache;
 import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCacheEntry;
 import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCacheKey;
@@ -216,9 +217,9 @@ public class OAuth2AuthzEndpoint {
 
         try {
             if(StringUtils.isNotEmpty(clientId)) {
-                OAuthAppDAO oAuthAppDAO = new OAuthAppDAO();
+                OAuthAdminService oAuthAdminService = new OAuthAdminService();
                 try {
-                    String appState = oAuthAppDAO.getConsumerAppState(clientId);
+                    String appState = oAuthAdminService.getOauthApplicationState(clientId);
                     if(!OAuthConstants.OauthAppStates.APP_STATE_ACTIVE.equalsIgnoreCase(appState)) {
                         if (log.isDebugEnabled()) {
                             log.debug("Oauth App is not in active state.");

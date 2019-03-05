@@ -336,6 +336,20 @@ public class OAuthAdminService extends AbstractAdmin {
      * @throws IdentityOAuthAdminException
      */
     public String getOauthApplicationState(String consumerKey) throws IdentityOAuthAdminException {
+
+        if (OAuthServerConfiguration.getInstance().isCacheEnabled()) {
+            OAuthAppDO oAuthAppDO = appInfoCache.getValueFromCache(consumerKey);
+            if (oAuthAppDO != null && StringUtils.isNotBlank(oAuthAppDO.getState())) {
+                return oAuthAppDO.getState();
+            } else if (oAuthAppDO != null) {
+                OAuthAppDAO oAuthAppDAO = new OAuthAppDAO();
+                String consumerAppState = oAuthAppDAO.getConsumerAppState(consumerKey);
+                oAuthAppDO.setState(consumerAppState);
+                appInfoCache.addToCache(consumerKey, oAuthAppDO);
+                return consumerAppState;
+            }
+        }
+
         OAuthAppDAO oAuthAppDAO = new OAuthAppDAO();
         return oAuthAppDAO.getConsumerAppState(consumerKey);
     }

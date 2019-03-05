@@ -221,6 +221,7 @@ public class OAuth2Util {
     public static final String ID_TOKEN_EXPIRY_TIME_IN_MILLISECONDS = "idTokenExpireTime";
 
     public static final String RENEW_REFRESH_TOKEN = "renewRefreshToken";
+    private static final String OAUTH_USE_PER_SPEXPIRY_TIME = "OAuth.UsePerSPExpiryTime";
 
     private static Log log = LogFactory.getLog(OAuth2Util.class);
     private static boolean cacheEnabled = OAuthServerConfiguration.getInstance().isCacheEnabled();
@@ -1297,120 +1298,130 @@ public class OAuth2Util {
                     + "  for application id : " + consumerKey);
         }
 
-        try {
-
-            IdentityTenantUtil.initializeRegistry(tenantId, getTenantDomain(tenantId));
-            Registry registry = IdentityTenantUtil.getConfigRegistry(tenantId);
-            if (registry.resourceExists(OAuthConstants.TOKEN_EXPIRE_TIME_RESOURCE_PATH)) {
-                Resource resource = registry.get(OAuthConstants.TOKEN_EXPIRE_TIME_RESOURCE_PATH);
-                String jsonString = "{}";
-                Object consumerKeyObject = resource.getProperties().get(consumerKey);
-                if (consumerKeyObject instanceof List) {
-                    if (!((List) consumerKeyObject).isEmpty()) {
-                        jsonString = ((List) consumerKeyObject).get(0).toString();
-                    }
-                }
-                JSONObject spTimeObject = new JSONObject(jsonString);
-                if (spTimeObject.length() > 0) {
-
-                    if (log.isDebugEnabled()) {
-                        log.debug("Overriding the token expiry times with the service provider level token expiry times " +
-                                " for tenant id : " + tenantId + "and consumer key : " + consumerKey);
-                    }
-
-                    if (spTimeObject.has(USER_ACCESS_TOKEN_TIME_IN_MILLISECONDS) &&
-                            !spTimeObject.isNull(USER_ACCESS_TOKEN_TIME_IN_MILLISECONDS)) {
-                        try {
-                            spTokenTimeObject.setUserAccessTokenExpiryTime(Long.parseLong(spTimeObject
-                                    .get(USER_ACCESS_TOKEN_TIME_IN_MILLISECONDS).toString()));
-                            if (log.isDebugEnabled()) {
-                                log.debug("Service provider level user access token expiry time : " +
-                                        spTimeObject.get(USER_ACCESS_TOKEN_TIME_IN_MILLISECONDS).toString() +
-                                        "  for application id : " + consumerKey);
-                            }
-                        } catch (NumberFormatException e) {
-                            String errorMsg = String.format("Invalid value provided as the service provider level " +
-                                            "user access token expiry time for consumer key : '%s', tenant id : '%d'. " +
-                                            "Given value: '%s', Expected a long value.", consumerKey, tenantId,
-                                    spTimeObject.get(USER_ACCESS_TOKEN_TIME_IN_MILLISECONDS).toString());
-                            log.error(errorMsg, e);
+        if (hasPerSPExpiryTimeEnabled()) {
+            try {
+                IdentityTenantUtil.initializeRegistry(tenantId, getTenantDomain(tenantId));
+                Registry registry = IdentityTenantUtil.getConfigRegistry(tenantId);
+                if (registry.resourceExists(OAuthConstants.TOKEN_EXPIRE_TIME_RESOURCE_PATH)) {
+                    Resource resource = registry.get(OAuthConstants.TOKEN_EXPIRE_TIME_RESOURCE_PATH);
+                    String jsonString = "{}";
+                    Object consumerKeyObject = resource.getProperties().get(consumerKey);
+                    if (consumerKeyObject instanceof List) {
+                        if (!((List) consumerKeyObject).isEmpty()) {
+                            jsonString = ((List) consumerKeyObject).get(0).toString();
                         }
                     }
+                    JSONObject spTimeObject = new JSONObject(jsonString);
+                    if (spTimeObject.length() > 0) {
 
-                    if (spTimeObject.has(APPLICATION_ACCESS_TOKEN_TIME_IN_MILLISECONDS) &&
-                            !spTimeObject.isNull(APPLICATION_ACCESS_TOKEN_TIME_IN_MILLISECONDS)) {
-                        try {
-                            spTokenTimeObject.setApplicationAccessTokenExpiryTime(Long.parseLong(spTimeObject
-                                    .get(APPLICATION_ACCESS_TOKEN_TIME_IN_MILLISECONDS).toString()));
-                            if (log.isDebugEnabled()) {
-                                log.debug("Service provider level application access token expiry time : " +
-                                        spTimeObject.get(APPLICATION_ACCESS_TOKEN_TIME_IN_MILLISECONDS).toString() +
-                                        "  for application id : " + consumerKey);
-                            }
-                        } catch (NumberFormatException e) {
-                            String errorMsg = String.format("Invalid value provided as the service provider level " +
-                                    "application access token expiry time for consumer key : '%s', tenant id : '%d'. " +
-                                    "Given value: '%s', Expected a long value.", consumerKey, tenantId,
-                                    spTimeObject.get(APPLICATION_ACCESS_TOKEN_TIME_IN_MILLISECONDS).toString());
-                            log.error(errorMsg, e);
-                        }
-                    }
-
-                    if (spTimeObject.has(REFRESH_TOKEN_TIME_IN_MILLISECONDS) &&
-                            !spTimeObject.isNull(REFRESH_TOKEN_TIME_IN_MILLISECONDS)) {
-                        try {
-                            spTokenTimeObject.setRefreshTokenExpiryTime(Long.parseLong(spTimeObject
-                                    .get(REFRESH_TOKEN_TIME_IN_MILLISECONDS).toString()));
-                            if (log.isDebugEnabled()) {
-                                log.debug("Service provider level refresh token expiry time : " +
-                                        spTimeObject.get(REFRESH_TOKEN_TIME_IN_MILLISECONDS).toString() +
-                                        " for application id : " + consumerKey);
-                            }
-
-                        } catch (NumberFormatException e) {
-                            String errorMsg = String.format("Invalid value provided as the service provider level " +
-                                    "refresh token expiry time for consumer key : '%s', tenant id : '%d'. " +
-                                    "Given value: '%s', Expected a long value.", consumerKey, tenantId,
-                                    spTimeObject.get(REFRESH_TOKEN_TIME_IN_MILLISECONDS).toString());
-                            log.error(errorMsg, e);
-                        }
-                    }
-
-                    if (spTimeObject.has(ID_TOKEN_EXPIRY_TIME_IN_MILLISECONDS) &&
-                            !spTimeObject.isNull(ID_TOKEN_EXPIRY_TIME_IN_MILLISECONDS)) {
-                        try {
-                            spTokenTimeObject.setIdTokenExpiryTime(Long.parseLong(spTimeObject
-                                    .get(ID_TOKEN_EXPIRY_TIME_IN_MILLISECONDS).toString()));
-                            if (log.isDebugEnabled()) {
-                                log.debug("Service provider level id_token expiry time : " +
-                                        spTimeObject.get(ID_TOKEN_EXPIRY_TIME_IN_MILLISECONDS).toString() +
-                                        " for application id : " + consumerKey);
-                            }
-
-                        } catch (NumberFormatException e) {
-                            String errorMsg = String.format("Invalid value provided as the service provider level " +
-                                    "id_token expiry time for consumer key : '%s', tenant id : '%d'. " +
-                                    "Given value: '%s', Expected a long value.", consumerKey, tenantId,
-                                    spTimeObject.get(ID_TOKEN_EXPIRY_TIME_IN_MILLISECONDS).toString());
-                            log.error(errorMsg, e);
-                        }
-                    }
-                    if (spTimeObject.has(RENEW_REFRESH_TOKEN) && !spTimeObject.isNull(RENEW_REFRESH_TOKEN)) {
-                        spTokenTimeObject.setRenewRefreshToken(spTimeObject.get(RENEW_REFRESH_TOKEN).toString());
                         if (log.isDebugEnabled()) {
-                            log.debug("Service provider level condition of renew refreh token : " +
-                                    spTimeObject.get(RENEW_REFRESH_TOKEN).toString() +
-                                    " for application id : " + consumerKey);
+                            log.debug("Overriding the token expiry times with the service provider level token expiry times " +
+                                    " for tenant id : " + tenantId + "and consumer key : " + consumerKey);
+                        }
+
+                        if (spTimeObject.has(USER_ACCESS_TOKEN_TIME_IN_MILLISECONDS) &&
+                                !spTimeObject.isNull(USER_ACCESS_TOKEN_TIME_IN_MILLISECONDS)) {
+                            try {
+                                spTokenTimeObject.setUserAccessTokenExpiryTime(Long.parseLong(spTimeObject
+                                        .get(USER_ACCESS_TOKEN_TIME_IN_MILLISECONDS).toString()));
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Service provider level user access token expiry time : " +
+                                            spTimeObject.get(USER_ACCESS_TOKEN_TIME_IN_MILLISECONDS).toString() +
+                                            "  for application id : " + consumerKey);
+                                }
+                            } catch (NumberFormatException e) {
+                                String errorMsg = String.format("Invalid value provided as the service provider level " +
+                                                "user access token expiry time for consumer key : '%s', tenant id : '%d'. " +
+                                                "Given value: '%s', Expected a long value.", consumerKey, tenantId,
+                                        spTimeObject.get(USER_ACCESS_TOKEN_TIME_IN_MILLISECONDS).toString());
+                                log.error(errorMsg, e);
+                            }
+                        }
+
+                        if (spTimeObject.has(APPLICATION_ACCESS_TOKEN_TIME_IN_MILLISECONDS) &&
+                                !spTimeObject.isNull(APPLICATION_ACCESS_TOKEN_TIME_IN_MILLISECONDS)) {
+                            try {
+                                spTokenTimeObject.setApplicationAccessTokenExpiryTime(Long.parseLong(spTimeObject
+                                        .get(APPLICATION_ACCESS_TOKEN_TIME_IN_MILLISECONDS).toString()));
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Service provider level application access token expiry time : " +
+                                            spTimeObject.get(APPLICATION_ACCESS_TOKEN_TIME_IN_MILLISECONDS).toString() +
+                                            "  for application id : " + consumerKey);
+                                }
+                            } catch (NumberFormatException e) {
+                                String errorMsg = String.format("Invalid value provided as the service provider level " +
+                                                "application access token expiry time for consumer key : '%s', tenant id : '%d'. " +
+                                                "Given value: '%s', Expected a long value.", consumerKey, tenantId,
+                                        spTimeObject.get(APPLICATION_ACCESS_TOKEN_TIME_IN_MILLISECONDS).toString());
+                                log.error(errorMsg, e);
+                            }
+                        }
+
+                        if (spTimeObject.has(REFRESH_TOKEN_TIME_IN_MILLISECONDS) &&
+                                !spTimeObject.isNull(REFRESH_TOKEN_TIME_IN_MILLISECONDS)) {
+                            try {
+                                spTokenTimeObject.setRefreshTokenExpiryTime(Long.parseLong(spTimeObject
+                                        .get(REFRESH_TOKEN_TIME_IN_MILLISECONDS).toString()));
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Service provider level refresh token expiry time : " +
+                                            spTimeObject.get(REFRESH_TOKEN_TIME_IN_MILLISECONDS).toString() +
+                                            " for application id : " + consumerKey);
+                                }
+
+                            } catch (NumberFormatException e) {
+                                String errorMsg = String.format("Invalid value provided as the service provider level " +
+                                                "refresh token expiry time for consumer key : '%s', tenant id : '%d'. " +
+                                                "Given value: '%s', Expected a long value.", consumerKey, tenantId,
+                                        spTimeObject.get(REFRESH_TOKEN_TIME_IN_MILLISECONDS).toString());
+                                log.error(errorMsg, e);
+                            }
+                        }
+
+                        if (spTimeObject.has(ID_TOKEN_EXPIRY_TIME_IN_MILLISECONDS) &&
+                                !spTimeObject.isNull(ID_TOKEN_EXPIRY_TIME_IN_MILLISECONDS)) {
+                            try {
+                                spTokenTimeObject.setIdTokenExpiryTime(Long.parseLong(spTimeObject
+                                        .get(ID_TOKEN_EXPIRY_TIME_IN_MILLISECONDS).toString()));
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Service provider level id_token expiry time : " +
+                                            spTimeObject.get(ID_TOKEN_EXPIRY_TIME_IN_MILLISECONDS).toString() +
+                                            " for application id : " + consumerKey);
+                                }
+
+                            } catch (NumberFormatException e) {
+                                String errorMsg = String.format("Invalid value provided as the service provider level " +
+                                                "id_token expiry time for consumer key : '%s', tenant id : '%d'. " +
+                                                "Given value: '%s', Expected a long value.", consumerKey, tenantId,
+                                        spTimeObject.get(ID_TOKEN_EXPIRY_TIME_IN_MILLISECONDS).toString());
+                                log.error(errorMsg, e);
+                            }
+                        }
+                        if (spTimeObject.has(RENEW_REFRESH_TOKEN) && !spTimeObject.isNull(RENEW_REFRESH_TOKEN)) {
+                            spTokenTimeObject.setRenewRefreshToken(spTimeObject.get(RENEW_REFRESH_TOKEN).toString());
+                            if (log.isDebugEnabled()) {
+                                log.debug("Service provider level condition of renew refreh token : " +
+                                        spTimeObject.get(RENEW_REFRESH_TOKEN).toString() +
+                                        " for application id : " + consumerKey);
+                            }
                         }
                     }
                 }
+            } catch (RegistryException e) {
+                log.error("Error while getting data from the registry.", e);
+            } catch (IdentityException e) {
+                log.error("Error while getting the tenant domain from tenant id : " + tenantId, e);
             }
-        } catch (RegistryException e) {
-            log.error("Error while getting data from the registry.", e);
-        } catch (IdentityException e) {
-            log.error("Error while getting the tenant domain from tenant id : " + tenantId, e);
         }
         return spTokenTimeObject;
+    }
+
+    private static boolean hasPerSPExpiryTimeEnabled() {
+
+        String property = IdentityUtil.getProperty(OAUTH_USE_PER_SPEXPIRY_TIME);
+        if (StringUtils.isNotBlank(property) && "false".equalsIgnoreCase(property)) {
+            return false;
+        }
+        return true;
     }
 
     private static Map<String, String> loadScopeConfigFile() {
