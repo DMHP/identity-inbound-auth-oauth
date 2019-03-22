@@ -31,6 +31,7 @@ import org.wso2.carbon.identity.application.common.model.ServiceProvider;
 import org.wso2.carbon.identity.application.common.model.User;
 import org.wso2.carbon.identity.application.mgt.ApplicationManagementService;
 import org.wso2.carbon.identity.base.IdentityException;
+import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.identity.oauth.IdentityOAuthAdminException;
 import org.wso2.carbon.identity.oauth.OAuthAdminService;
 import org.wso2.carbon.identity.oauth.dcr.DCRException;
@@ -53,6 +54,7 @@ public class DCRManagementService {
 
     private static final String AUTH_TYPE_OAUTH_2 = "oauth2";
     private static final String OAUTH_CONSUMER_SECRET = "oauthConsumerSecret";
+    private static final String SERVICE_PROVIDERS_NAME_REGEX = "ServiceProviders.SPNameRegex";
     private static final String OAUTH_VERSION = "OAuth-2.0";
     // If client secret doesn't expire it should be 0
     private static final String DEFAULT_CLIENT_SECRET_EXPIREY_TIME = "0";
@@ -90,7 +92,7 @@ public class DCRManagementService {
         // Regex validation of the application name.
         if (!isRegexValidated(applicationName)) {
             throw new DCRException("The Application name " + applicationName + " is not valid! It is not adhering to" +
-                    " the regex " + APP_NAME_VALIDATING_REGEX);
+                    " the regex " + getSPValidatorRegex());
         }
 
         RegistrationResponseProfile info;
@@ -124,8 +126,8 @@ public class DCRManagementService {
         String applicationName = ownerName + "_" + profile.getClientName();
         // Regex validation of the application name.
         if (!isRegexValidated(applicationName)) {
-            throw new DCRException("The Application name " + applicationName + " is not valid! It is not adhering to" +
-                    " the regex " + APP_NAME_VALIDATING_REGEX);
+            throw new DCRException("REGEXVALFAILED The Application name " + applicationName + " is not valid! It is " +
+                    "not adhering to the regex " + getSPValidatorRegex());
         }
 
         String grantType = StringUtils.join(profile.getGrantTypes(), " ");
@@ -373,13 +375,22 @@ public class DCRManagementService {
      */
     public static boolean isRegexValidated(String applicationName) {
 
-        String spValidatorRegex = APP_NAME_VALIDATING_REGEX;
+        String spValidatorRegex = getSPValidatorRegex();
         Pattern regexPattern = Pattern.compile(spValidatorRegex);
         if (regexPattern.matcher(applicationName).matches()) {
             return true;
         } else {
             return false;
         }
+    }
+
+    private static String getSPValidatorRegex() {
+
+        String spValidatorRegex = IdentityUtil.getProperty(SERVICE_PROVIDERS_NAME_REGEX);
+        if (StringUtils.isBlank(spValidatorRegex)) {
+            spValidatorRegex = APP_NAME_VALIDATING_REGEX;
+        }
+        return spValidatorRegex;
     }
 
 }
