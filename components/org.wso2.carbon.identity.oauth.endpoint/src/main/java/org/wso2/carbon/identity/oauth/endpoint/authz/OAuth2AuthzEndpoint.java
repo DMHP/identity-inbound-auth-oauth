@@ -49,6 +49,7 @@ import org.wso2.carbon.identity.application.common.model.ClaimMapping;
 import org.wso2.carbon.identity.application.common.model.ServiceProvider;
 import org.wso2.carbon.identity.application.common.model.ServiceProviderProperty;
 import org.wso2.carbon.identity.application.mgt.ApplicationManagementService;
+import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.identity.oauth.IdentityOAuthAdminException;
 import org.wso2.carbon.identity.oauth.OAuthAdminService;
 import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCache;
@@ -320,14 +321,8 @@ public class OAuth2AuthzEndpoint {
 
                     } else {
 
-                        OAuthProblemException oauthException;
-                        Object authError = authnResult.getProperty(AUTHENTICATION_RESULT_ERROR_PARAM_KEY);
-                        if (authError != null && authError instanceof OAuthProblemException) {
-                            oauthException = (OAuthProblemException) authError;
-                        } else {
-                            oauthException = OAuthProblemException.error(OAuth2ErrorCodes.LOGIN_REQUIRED,
-                                                                         "Authentication required");
-                        }
+                        OAuthProblemException oauthException =
+                                buildOAuthProblemExceptionForAuthenticationFailure(authnResult);
                         redirectURL = EndpointUtil.getErrorRedirectURL(request, oauthException, oauth2Params);
                         if (isOIDCRequest) {
                             Cookie opBrowserStateCookie = OIDCSessionManagementUtil.getOPBrowserStateCookie(request);
@@ -485,6 +480,50 @@ public class OAuth2AuthzEndpoint {
             }
 
             PrivilegedCarbonContext.endTenantFlow();
+        }
+    }
+
+    private OAuthProblemException buildOAuthProblemExceptionForAuthenticationFailure(AuthenticationResult authnResult) {
+        OAuthProblemException oauthException;
+        Object authError = authnResult.getProperty(AUTHENTICATION_RESULT_ERROR_PARAM_KEY);
+
+        if (authError instanceof OAuthProblemException) {
+            oauthException = (OAuthProblemException) authError;
+        } else {
+            oauthException = buildOAuthProblemException(authnResult);
+        }
+        return oauthException;
+    }
+
+    /**
+     * Build OAuthProblem exception based on error details sent by the Framework as properties in the
+     * AuthenticationResult object.
+     *
+     * @param authenticationResult
+     * @return
+     */
+    private OAuthProblemException buildOAuthProblemException (AuthenticationResult authenticationResult) {
+
+        final String DEFAULT_ERROR_MSG = "Authentication required";
+        String errorCode = String.valueOf(authenticationResult.getProperty(FrameworkConstants.AUTH_ERROR_CODE));
+        String errorMessage = String.valueOf(authenticationResult.getProperty(FrameworkConstants.AUTH_ERROR_MSG));
+        String errorUri = String.valueOf(authenticationResult.getProperty(FrameworkConstants.AUTH_ERROR_URI));
+
+        if (IdentityUtil.isBlank(errorCode)) {
+            // If there is no custom error code sent from framework we set our default error code.
+            errorCode = OAuth2ErrorCodes.LOGIN_REQUIRED;
+        }
+
+        if (IdentityUtil.isBlank(errorMessage)) {
+            // If there is no custom error message sent from framework we set our default error message.
+            errorMessage = DEFAULT_ERROR_MSG;
+        }
+
+        if (IdentityUtil.isNotBlank(errorUri)) {
+            // If there is a error uri sent in the authentication result we add that to the exception.
+            return OAuthProblemException.error(errorCode, errorMessage).uri(errorUri);
+        } else {
+            return OAuthProblemException.error(errorCode, errorMessage);
         }
     }
 
