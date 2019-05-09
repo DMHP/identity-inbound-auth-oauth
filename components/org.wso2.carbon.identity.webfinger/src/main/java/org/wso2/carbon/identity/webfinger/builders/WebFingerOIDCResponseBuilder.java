@@ -46,12 +46,12 @@ public class WebFingerOIDCResponseBuilder {
         WebFingerResponse response;
         String oidcIssuerLocation;
         try {
-        oidcIssuerLocation = getOidcIssuerLocation(request.getTenant());
+            oidcIssuerLocation = getOidcIssuerLocation(request.getTenant());
         } catch (URISyntaxException e) {
-            throw new ServerConfigurationException("URI Syntax error while retrieving oidcIssuerLOcation for tenant: " +
+            throw new ServerConfigurationException("URI Syntax error while retrieving oidcIssuerLocation for tenant: " +
                     request.getTenant(), e);
         } catch (IdentityOAuth2Exception e) {
-            throw new WebFingerEndpointException ("Error while retrieving oidcIssuerLOcation for tenant: " +
+            throw new WebFingerEndpointException ("Error while retrieving oidcIssuerLocation for tenant: " +
                     request.getTenant());
         }
         response = new WebFingerResponse();
@@ -64,12 +64,15 @@ public class WebFingerOIDCResponseBuilder {
 
         if (isUseEntityIdAsIssuerInOidcDiscovery()) {
             if (log.isDebugEnabled()) {
-                log.debug("Retrieving OIDC Issuer location from the Resident IDP configs.");
+                log.debug("Retrieving OIDC Issuer location value: " + OAuth2Util.getIdTokenIssuer(tenantDomain) +
+                        " of tenant: " + tenantDomain + " from the Resident IDP configs.");
             }
             return OAuth2Util.getIdTokenIssuer(tenantDomain);
         } else {
             if (log.isDebugEnabled()) {
-                log.debug("Retrieving OIDC Issuer location as the config in identity.xml file.");
+                log.debug("Retrieving OIDC Issuer location value: " +
+                        OAuth2Util.OAuthURL.getOidcDiscoveryEPUrl(tenantDomain) + " of tenant: " + tenantDomain +
+                        " from the values in identity.xml file.");
             }
             return OAuth2Util.OAuthURL.getOidcDiscoveryEPUrl(tenantDomain);
         }
