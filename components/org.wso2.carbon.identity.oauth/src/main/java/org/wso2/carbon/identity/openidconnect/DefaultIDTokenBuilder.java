@@ -17,7 +17,11 @@
  */
 package org.wso2.carbon.identity.openidconnect;
 
-import com.nimbusds.jose.*;
+import com.nimbusds.jose.Algorithm;
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.JWSSigner;
 import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jose.util.Base64URL;
@@ -36,7 +40,11 @@ import org.apache.oltu.oauth2.common.message.types.ResponseType;
 import org.wso2.carbon.base.MultitenantConstants;
 import org.wso2.carbon.core.util.KeyStoreManager;
 import org.wso2.carbon.identity.application.common.IdentityApplicationManagementException;
-import org.wso2.carbon.identity.application.common.model.*;
+import org.wso2.carbon.identity.application.common.model.ClaimConfig;
+import org.wso2.carbon.identity.application.common.model.ClaimMapping;
+import org.wso2.carbon.identity.application.common.model.InboundAuthenticationRequestConfig;
+import org.wso2.carbon.identity.application.common.model.Property;
+import org.wso2.carbon.identity.application.common.model.ServiceProvider;
 import org.wso2.carbon.identity.application.common.util.IdentityApplicationConstants;
 import org.wso2.carbon.identity.application.mgt.ApplicationManagementService;
 import org.wso2.carbon.identity.base.IdentityException;
@@ -44,7 +52,12 @@ import org.wso2.carbon.identity.core.util.IdentityConfigParser;
 import org.wso2.carbon.identity.core.util.IdentityCoreConstants;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
-import org.wso2.carbon.identity.oauth.cache.*;
+import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCache;
+import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCacheEntry;
+import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCacheKey;
+import org.wso2.carbon.identity.oauth.cache.CacheEntry;
+import org.wso2.carbon.identity.oauth.cache.OAuthCache;
+import org.wso2.carbon.identity.oauth.cache.OAuthCacheKey;
 import org.wso2.carbon.identity.oauth.common.OAuthConstants;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
@@ -68,7 +81,14 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.Certificate;
 import java.security.interfaces.RSAPrivateKey;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Collections;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -119,7 +139,7 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
             throws IdentityOAuth2Exception {
         String tenantDomain = request.getOauth2AccessTokenReqDTO().getTenantDomain();
         ServiceProvider serviceProvider = null;
-        String issuer = OAuth2Util.getIdTokenIssuer( tenantDomain );
+        String issuer = OAuth2Util.getIdTokenIssuer(tenantDomain);
 
         SpOAuth2ExpiryTimeConfiguration expiryTimeConfigurations = OAuth2Util
                 .getSpTokenExpiryTimeConfig(request.getOauth2AccessTokenReqDTO().getClientId(), OAuth2Util
@@ -323,7 +343,7 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
             throws IdentityOAuth2Exception {
 
         String tenantDomain = request.getAuthorizationReqDTO().getTenantDomain();
-        String issuer = OAuth2Util.getIdTokenIssuer( tenantDomain );
+        String issuer = OAuth2Util.getIdTokenIssuer(tenantDomain);
 
         SpOAuth2ExpiryTimeConfiguration expiryTimeConfigurations = OAuth2Util
                 .getSpTokenExpiryTimeConfig(request.getAuthorizationReqDTO().getConsumerKey(), OAuth2Util

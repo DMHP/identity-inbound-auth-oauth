@@ -89,9 +89,9 @@
                             org.wso2.carbon.user.core.*;version="${carbon.kernel.imp.pkg.version.range}",
                             org.wso2.carbon.utils.multitenancy;version="${carbon.kernel.imp.pkg.version.range}",
                             com.google.gson;version="${com.google.code.gson.osgi.version.range}",
-                            org.wso2.carbon.identity.oauth2.*,
-                            org.wso2.carbon.identity.openidconnect.*,
-                            org.wso2.carbon.identity.discovery.*,
+                            org.wso2.carbon.identity.oauth2.*; version="${identity.inbound.auth.oauth.imp.pkg.version.range}",
+                            org.wso2.carbon.identity.openidconnect.*; version="${identity.inbound.auth.oauth.imp.pkg.version.range}",
+                            org.wso2.carbon.identity.discovery.*; version="${identity.inbound.auth.oauth.imp.pkg.version.range}",
                         </Import-Package>
                         <Export-Package>
                             !org.wso2.carbon.identity.webfinger.internal,

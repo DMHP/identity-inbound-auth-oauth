@@ -47,8 +47,12 @@ public class WebFingerOIDCResponseBuilder {
         String oidcIssuerLocation;
         try {
         oidcIssuerLocation = getOidcIssuerLocation(request.getTenant());
-        } catch (URISyntaxException | IdentityOAuth2Exception e) {
-            throw new ServerConfigurationException("Error while building discovery endpoint", e);
+        } catch (URISyntaxException e) {
+            throw new ServerConfigurationException("URI Syntax error while retrieving oidcIssuerLOcation for tenant: " +
+                    request.getTenant(), e);
+        } catch (IdentityOAuth2Exception e) {
+            throw new WebFingerEndpointException ("Error while retrieving oidcIssuerLOcation for tenant: " +
+                    request.getTenant());
         }
         response = new WebFingerResponse();
         response.setSubject(request.getResource());
@@ -58,12 +62,16 @@ public class WebFingerOIDCResponseBuilder {
 
     private String getOidcIssuerLocation(String tenantDomain) throws IdentityOAuth2Exception, URISyntaxException {
 
-        String oidcIssuerLocation;
         if (isUseEntityIdAsIssuerInOidcDiscovery()) {
-            oidcIssuerLocation = OAuth2Util.getIdTokenIssuer(tenantDomain);
+            if (log.isDebugEnabled()) {
+                log.debug("Retrieving OIDC Issuer location from the Resident IDP configs.");
+            }
+            return OAuth2Util.getIdTokenIssuer(tenantDomain);
         } else {
-            oidcIssuerLocation = OAuth2Util.OAuthURL.getOidcDiscoveryEPUrl(tenantDomain);
+            if (log.isDebugEnabled()) {
+                log.debug("Retrieving OIDC Issuer location as the config in identity.xml file.");
+            }
+            return OAuth2Util.OAuthURL.getOidcDiscoveryEPUrl(tenantDomain);
         }
-        return oidcIssuerLocation;
     }
 }
