@@ -45,8 +45,8 @@ public class LogUtil {
             LogManager.getRootLogger().setLevel(level);
         } catch (Throwable t) {
             // We catch throwable as there is a case where logger level setting fails when old SLF4j library interferes.
-            log.error("Could not set the log level to : " + level + ". Probably inconsistent Log4J class is loaded.",
-                    t);
+            log.error("Could not set the log level to : " + level +
+                            ". Probably inconsistent Log4J class is loaded.", t);
         }
     }
 }

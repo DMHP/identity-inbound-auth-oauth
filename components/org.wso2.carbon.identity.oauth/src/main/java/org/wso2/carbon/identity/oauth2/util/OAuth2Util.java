@@ -2240,8 +2240,7 @@ public class OAuth2Util {
         try {
             return IdentityProviderManager.getInstance().getResidentIdP(tenantDomain);
         } catch (IdentityProviderManagementException e) {
-            String errorMsg = String.format("Error while getting Resident Identity Provider of '%s' tenant.", tenantDomain);
-            throw new IdentityOAuth2Exception(errorMsg, e);
+            throw new IdentityOAuth2Exception("Error while getting Resident Identity Provider of tenant: " + tenantDomain, e);
         }
     }
 
