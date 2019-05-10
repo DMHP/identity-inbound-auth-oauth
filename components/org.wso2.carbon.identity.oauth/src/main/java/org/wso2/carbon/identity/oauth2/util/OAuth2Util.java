@@ -2211,7 +2211,13 @@ public class OAuth2Util {
         return uri;
     }
 
-    public static String getIdTokenIssuer(String tenantDomain) throws IdentityOAuth2Exception {
+    /**
+     * Method to Retrieve Resident IDP EntityID value
+     * @param tenantDomain
+     * @return IdPEntityId
+     * @throws IdentityOAuth2Exception
+     */
+    public static String getResidentIDPEntityID(String tenantDomain) throws IdentityOAuth2Exception {
 
         IdentityProvider identityProvider = getResidentIdp(tenantDomain);
         FederatedAuthenticatorConfig[] fedAuthnConfigs = identityProvider.getFederatedAuthenticatorConfigs();
@@ -2223,6 +2229,12 @@ public class OAuth2Util {
                 IDP_ENTITY_ID).getValue();
     }
 
+    /**
+     * Method to Retrieve ResidentIDP value
+     * @param tenantDomain
+     * @return IdentityProvider
+     * @throws IdentityOAuth2Exception
+     */
     private static IdentityProvider getResidentIdp(String tenantDomain) throws IdentityOAuth2Exception {
 
         try {

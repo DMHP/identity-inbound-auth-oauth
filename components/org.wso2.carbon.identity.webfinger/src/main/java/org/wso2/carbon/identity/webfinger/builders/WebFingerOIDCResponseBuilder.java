@@ -60,14 +60,21 @@ public class WebFingerOIDCResponseBuilder {
         return response;
     }
 
+    /**
+     * Method to get OIDC Issuer location
+     * @param tenantDomain
+     * @return OidcIssuerLocation
+     * @throws IdentityOAuth2Exception
+     * @throws URISyntaxException
+     */
     private String getOidcIssuerLocation(String tenantDomain) throws IdentityOAuth2Exception, URISyntaxException {
 
         if (isUseEntityIdAsIssuerInOidcDiscovery()) {
             if (log.isDebugEnabled()) {
-                log.debug("Retrieving OIDC Issuer location value: " + OAuth2Util.getIdTokenIssuer(tenantDomain) +
+                log.debug("Retrieving OIDC Issuer location value: " + OAuth2Util.getResidentIDPEntityID(tenantDomain) +
                         " of tenant: " + tenantDomain + " from the Resident IDP configs.");
             }
-            return OAuth2Util.getIdTokenIssuer(tenantDomain);
+            return OAuth2Util.getResidentIDPEntityID(tenantDomain);
         } else {
             if (log.isDebugEnabled()) {
                 log.debug("Retrieving OIDC Issuer location value: " +

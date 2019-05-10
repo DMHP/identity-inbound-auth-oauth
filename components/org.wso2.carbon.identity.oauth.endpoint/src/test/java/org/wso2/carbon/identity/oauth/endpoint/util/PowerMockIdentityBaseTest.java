@@ -27,11 +27,11 @@ import org.testng.annotations.Parameters;
  *
  * Example :
  * {@code
- *  <test name="basic-authenticator-tests-with-debug-logs" preserve-order="true" parallel="false">
- *      <parameter name="log-level" value="debug"/>
- *      <classes>
- *          <class name="org.wso2.carbon.identity.application.authenticator.basicauth.BasicAuthenticatorTestCase"/>
- *      </classes>
+ *  <test name="OAuth2EndpointTestsWithDebugEnabled" preserve-order="true" parallel="false">
+ *     <parameter name="log-level" value="debug"/>
+ *     <classes>
+ *         <class name="org.wso2.carbon.identity.oauth.endpoint.oidcdiscovery.OIDCDiscoveryEndpointTest" />
+ *     </classes>
  *  </test>
  * }
  *

@@ -53,17 +53,21 @@ public class ProviderConfigBuilder {
         OIDProviderConfigResponse providerConfig = new OIDProviderConfigResponse();
         if (isUseEntityIdAsIssuerInOidcDiscovery()) {
             try {
-                providerConfig.setIssuer(OAuth2Util.getIdTokenIssuer(request.getTenantDomain()));
-                log.debug("Using Resident IDP EntityID value: " +
-                        OAuth2Util.getIdTokenIssuer(request.getTenantDomain()) + " of tenant: " +
-                        request.getTenantDomain() + " as the issuer value.");
+                providerConfig.setIssuer(OAuth2Util.getResidentIDPEntityID(request.getTenantDomain()));
+                if (log.isDebugEnabled()) {
+                    log.debug("Using Resident IDP EntityID value: " +
+                            OAuth2Util.getResidentIDPEntityID(request.getTenantDomain()) + " of tenant: " +
+                            request.getTenantDomain() + " as the issuer value.");
+                }
             } catch (IdentityOAuth2Exception e) {
                 throw new ServerConfigurationException("Error while retrieving Id_token issuer", e);
             }
         } else {
             providerConfig.setIssuer(OAuth2Util.getIDTokenIssuer());
-            log.debug("Using IDTokenIssuerID value: " + OAuth2Util.getIDTokenIssuer() +
-                    " in identity.xml file as the issuer value.");
+            if (log.isDebugEnabled()) {
+                log.debug("Using IDTokenIssuerID value: " + OAuth2Util.getIDTokenIssuer() +
+                        " in identity.xml file as the issuer value.");
+            }
         }
         providerConfig.setAuthorizationEndpoint(OAuth2Util.OAuthURL.getOAuth2AuthzEPUrl());
         providerConfig.setTokenEndpoint(OAuth2Util.OAuthURL.getOAuth2TokenEPUrl());

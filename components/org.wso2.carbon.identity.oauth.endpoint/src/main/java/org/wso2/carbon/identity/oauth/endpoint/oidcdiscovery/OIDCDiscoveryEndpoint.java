@@ -69,6 +69,11 @@ public class OIDCDiscoveryEndpoint {
         }
     }
 
+    /**
+     * Method to check the validity of the Issuer
+     * @param issuer
+     * @return true if Issuer is valid else return false
+     */
     private boolean isValidIssuer(String issuer) {
         if (DISCOVERY_ENDPOINT_PATH_COMPONENT_VALUE_TOKEN.equals(issuer) || DISCOVERY_ENDPOINT_PATH_COMPONENT_VALUE_OIDCDISCOVERY
                 .equals(issuer)) {

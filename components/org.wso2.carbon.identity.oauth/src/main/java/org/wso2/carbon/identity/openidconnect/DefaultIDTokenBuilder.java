@@ -139,7 +139,7 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
             throws IdentityOAuth2Exception {
         String tenantDomain = request.getOauth2AccessTokenReqDTO().getTenantDomain();
         ServiceProvider serviceProvider = null;
-        String issuer = OAuth2Util.getIdTokenIssuer(tenantDomain);
+        String issuer = OAuth2Util.getResidentIDPEntityID(tenantDomain);
 
         SpOAuth2ExpiryTimeConfiguration expiryTimeConfigurations = OAuth2Util
                 .getSpTokenExpiryTimeConfig(request.getOauth2AccessTokenReqDTO().getClientId(), OAuth2Util
@@ -343,7 +343,7 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
             throws IdentityOAuth2Exception {
 
         String tenantDomain = request.getAuthorizationReqDTO().getTenantDomain();
-        String issuer = OAuth2Util.getIdTokenIssuer(tenantDomain);
+        String issuer = OAuth2Util.getResidentIDPEntityID(tenantDomain);
 
         SpOAuth2ExpiryTimeConfiguration expiryTimeConfigurations = OAuth2Util
                 .getSpTokenExpiryTimeConfig(request.getAuthorizationReqDTO().getConsumerKey(), OAuth2Util
