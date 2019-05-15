@@ -42,13 +42,10 @@ import org.wso2.carbon.core.util.KeyStoreManager;
 import org.wso2.carbon.identity.application.common.IdentityApplicationManagementException;
 import org.wso2.carbon.identity.application.common.model.ClaimConfig;
 import org.wso2.carbon.identity.application.common.model.ClaimMapping;
-import org.wso2.carbon.identity.application.common.model.FederatedAuthenticatorConfig;
-import org.wso2.carbon.identity.application.common.model.IdentityProvider;
 import org.wso2.carbon.identity.application.common.model.InboundAuthenticationRequestConfig;
 import org.wso2.carbon.identity.application.common.model.Property;
 import org.wso2.carbon.identity.application.common.model.ServiceProvider;
 import org.wso2.carbon.identity.application.common.util.IdentityApplicationConstants;
-import org.wso2.carbon.identity.application.common.util.IdentityApplicationManagementUtil;
 import org.wso2.carbon.identity.application.mgt.ApplicationManagementService;
 import org.wso2.carbon.identity.base.IdentityException;
 import org.wso2.carbon.identity.core.util.IdentityConfigParser;
@@ -73,12 +70,11 @@ import org.wso2.carbon.identity.oauth2.internal.OAuth2ServiceComponentHolder;
 import org.wso2.carbon.identity.oauth2.model.AccessTokenDO;
 import org.wso2.carbon.identity.oauth2.token.OAuthTokenReqMessageContext;
 import org.wso2.carbon.identity.oauth2.util.OAuth2Util;
-import org.wso2.carbon.idp.mgt.IdentityProviderManagementException;
-import org.wso2.carbon.idp.mgt.IdentityProviderManager;
 import org.wso2.carbon.user.core.UserStoreException;
 import org.wso2.carbon.user.core.UserStoreManager;
 import org.wso2.carbon.user.core.util.UserCoreUtil;
 
+import javax.xml.namespace.QName;
 import java.security.Key;
 import java.security.KeyStore;
 import java.security.MessageDigest;
@@ -94,7 +90,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import javax.xml.namespace.QName;
 
 /**
  * This is the IDToken generator for the OpenID Connect Implementation. This
@@ -121,7 +116,6 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
     private static final String OPENID_CONNECT = "OpenIDConnect";
     private static final String OPENID_CONNECT_AUDIENCES = "Audiences";
     private static final String OPENID_CONNECT_AUDIENCE = "Audience";
-    private static final String OPENID_IDP_ENTITY_ID = "IdPEntityId";
 
     private static final Log log = LogFactory.getLog(DefaultIDTokenBuilder.class);
     private static final String REQUEST_OBJECT = "requestObject";
@@ -144,17 +138,8 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
     public String buildIDToken(OAuthTokenReqMessageContext request, OAuth2AccessTokenRespDTO tokenRespDTO)
             throws IdentityOAuth2Exception {
         String tenantDomain = request.getOauth2AccessTokenReqDTO().getTenantDomain();
-        IdentityProvider identityProvider = getResidentIdp(tenantDomain);
         ServiceProvider serviceProvider = null;
-        FederatedAuthenticatorConfig[] fedAuthnConfigs = identityProvider.getFederatedAuthenticatorConfigs();
-
-        // Get OIDC authenticator
-        FederatedAuthenticatorConfig samlAuthenticatorConfig =
-                IdentityApplicationManagementUtil.getFederatedAuthenticator(fedAuthnConfigs,
-                        IdentityApplicationConstants.Authenticator.OIDC.NAME);
-        String issuer =
-                IdentityApplicationManagementUtil.getProperty(samlAuthenticatorConfig.getProperties(),
-                        OPENID_IDP_ENTITY_ID).getValue();
+        String issuer = OAuth2Util.getResidentIDPEntityID(tenantDomain);
 
         SpOAuth2ExpiryTimeConfiguration expiryTimeConfigurations = OAuth2Util
                 .getSpTokenExpiryTimeConfig(request.getOauth2AccessTokenReqDTO().getClientId(), OAuth2Util
@@ -358,17 +343,7 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
             throws IdentityOAuth2Exception {
 
         String tenantDomain = request.getAuthorizationReqDTO().getTenantDomain();
-        IdentityProvider identityProvider = getResidentIdp(tenantDomain);
-        ServiceProvider serviceProvider = null;
-
-        FederatedAuthenticatorConfig[] fedAuthnConfigs = identityProvider.getFederatedAuthenticatorConfigs();
-        // Get OIDC authenticator
-        FederatedAuthenticatorConfig samlAuthenticatorConfig =
-                IdentityApplicationManagementUtil.getFederatedAuthenticator(fedAuthnConfigs,
-                        IdentityApplicationConstants.Authenticator.OIDC.NAME);
-        String issuer =
-                IdentityApplicationManagementUtil.getProperty(samlAuthenticatorConfig.getProperties(),
-                        OPENID_IDP_ENTITY_ID).getValue();
+        String issuer = OAuth2Util.getResidentIDPEntityID(tenantDomain);
 
         SpOAuth2ExpiryTimeConfiguration expiryTimeConfigurations = OAuth2Util
                 .getSpTokenExpiryTimeConfig(request.getAuthorizationReqDTO().getConsumerKey(), OAuth2Util
@@ -948,15 +923,6 @@ public class DefaultIDTokenBuilder implements org.wso2.carbon.identity.openidcon
 
     private QName getQNameWithIdentityNS(String localPart) {
         return new QName(IdentityCoreConstants.IDENTITY_DEFAULT_NAMESPACE, localPart);
-    }
-
-    private IdentityProvider getResidentIdp(String tenantDomain) throws IdentityOAuth2Exception {
-        try {
-            return IdentityProviderManager.getInstance().getResidentIdP(tenantDomain);
-        } catch (IdentityProviderManagementException e) {
-            String errorMsg = String.format(ERROR_GET_RESIDENT_IDP, tenantDomain);
-            throw new IdentityOAuth2Exception(errorMsg, e);
-        }
     }
 
     private String getHashValue(String value) throws IdentityOAuth2Exception {
