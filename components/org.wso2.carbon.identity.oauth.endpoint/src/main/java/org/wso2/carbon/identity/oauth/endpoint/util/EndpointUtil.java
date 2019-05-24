@@ -42,6 +42,7 @@ import org.wso2.carbon.identity.discovery.builders.OIDCProviderRequestBuilder;
 import org.wso2.carbon.identity.oauth.cache.SessionDataCache;
 import org.wso2.carbon.identity.oauth.cache.SessionDataCacheEntry;
 import org.wso2.carbon.identity.oauth.cache.SessionDataCacheKey;
+import org.wso2.carbon.identity.oauth.common.OAuth2ErrorCodes;
 import org.wso2.carbon.identity.oauth.common.OAuthConstants;
 import org.wso2.carbon.identity.oauth.common.exception.InvalidOAuthClientException;
 import org.wso2.carbon.identity.oauth.common.exception.OAuthClientException;
@@ -256,6 +257,46 @@ public class EndpointUtil {
             appName) {
         String redirectURL =  getErrorPageURL(errorCode, errorMessage, appName);
         return getRedirectURL(redirectURL, request);
+    }
+
+    /**
+     * Returns the error page URL.
+     * If isRedirectToOAuthErrorPage property is false and if the resource owner denies the access request or if the
+     * request fails for reasons other than a missing or invalid redirection URI, the authorization server informs
+     * the client by adding the error code, error message and state parameters to the query component of the
+     * redirection URI.
+     *
+     * If isRedirectToOAuthErrorPage property is true OR if the request fails due to a missing, invalid, or
+     * mismatching redirection URI, or if the client identifier is missing or invalid, the authorization server SHOULD
+     * inform the resource owner of the error and MUST NOT automatically redirect the user-agent to the invalid redirection URI.
+     *
+     * @param request   HttpServletRequest
+     * @param errorCode Error Code
+     * @param subErrorCode  Sub error code to identify the exact reason for invalid request
+     * @param errorMessage  Message of the error
+     * @param appName   Application Name
+     * @return url of the redirect error page
+     */
+    public static String getErrorPageURL(HttpServletRequest request, String errorCode, String subErrorCode, String
+                                         errorMessage, String appName) {
+        if(OAuthServerConfiguration.getInstance().isRedirectToOAuthErrorPageEnabled()) {
+            return getErrorPageURL(request, errorCode, errorMessage, appName);
+        } else if (subErrorCode.equals(OAuth2ErrorCodes.OAuth2SubErrorCodes.INVALID_REDIRECT_URI)) {
+            return getErrorPageURL(request, errorCode, errorMessage, appName);
+        }else {
+            String redirectUri = request.getParameter("redirect_uri");
+            try {
+                redirectUri += "?" + OAuthConstants.OAUTH_ERROR_CODE + "=" + URLEncoder.encode(errorCode, "UTF-8") +
+                        "&" + OAuthConstants.OAUTH_ERROR_MESSAGE + "=" + URLEncoder.encode(errorMessage, "UTF-8");
+            } catch (UnsupportedEncodingException e) {
+                //ignore
+                if (log.isDebugEnabled()){
+                    log.debug("Error while encoding the error page url", e);
+                }
+            }
+            return redirectUri;
+        }
+
     }
 
     /**
