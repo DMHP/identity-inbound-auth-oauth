@@ -37,14 +37,14 @@ public class OAuth2ErrorCodes {
 
     public class OAuth2SubErrorCodes {
 
-        public static final String INVALID_PCKE_CHALLENGE_CODE = "invalid_pcke_challenge_code";
+        public static final String INVALID_PKCE_CHALLENGE_CODE = "invalid_pkce_challenge_code";
         public static final String INVALID_CLIENT = "invalid_client";
         public static final String INVALID_REDIRECT_URI = "invalid_redirect_uri";
-        public static final String SESSION_TIMED_OUT = "session_timed_out";
+        public static final String SESSION_TIME_OUT = "session_time_out";
         public static final String CERTIFICATE_ERROR = "certificate_error";
         public static final String INVALID_AUTHORIZATION_REQUEST = "invalid_authorization_request";
         public static final String INVALID_REQUEST_OBJECT = "invalid_request_object";
-        public static final String OAUTH_PROBLEM_EXCEPTION = "oauth_problem_exception";
+        public static final String UNEXPECTED_SERVER_ERROR = "unexpected_server_error";
 
     }
 }

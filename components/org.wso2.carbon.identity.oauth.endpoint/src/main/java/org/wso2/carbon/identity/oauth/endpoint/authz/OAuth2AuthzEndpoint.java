@@ -194,7 +194,7 @@ public class OAuth2AuthzEndpoint {
                 log.debug("Session data not found in SessionDataCache for " + sessionDataKeyFromLogin);
             }
             return Response.status(HttpServletResponse.SC_FOUND).location(new URI(EndpointUtil.getErrorPageURL
-                    (request, OAuth2ErrorCodes.ACCESS_DENIED, OAuth2ErrorCodes.OAuth2SubErrorCodes.SESSION_TIMED_OUT,
+                    (request, OAuth2ErrorCodes.ACCESS_DENIED, OAuth2ErrorCodes.OAuth2SubErrorCodes.SESSION_TIME_OUT,
                             "Session Timed Out", null))).build();
 
         } else if (sessionDataKeyFromConsent != null && resultFromConsent == null) {
@@ -205,7 +205,7 @@ public class OAuth2AuthzEndpoint {
                 }
                 return Response.status(HttpServletResponse.SC_FOUND).location(new URI(EndpointUtil.getErrorPageURL
                         (request, OAuth2ErrorCodes.ACCESS_DENIED, OAuth2ErrorCodes.OAuth2SubErrorCodes
-                                .SESSION_TIMED_OUT, "Session Timed Out", null))).build();
+                                .SESSION_TIME_OUT, "Session Timed Out", null))).build();
             } else {
                 sessionDataKeyFromConsent = null;
             }
@@ -436,7 +436,7 @@ public class OAuth2AuthzEndpoint {
                 log.debug(e.getError(), e);
             }
             String errorPageURL = EndpointUtil.getErrorPageURL(request, OAuth2ErrorCodes.INVALID_REQUEST,
-                    OAuth2ErrorCodes.OAuth2SubErrorCodes.OAUTH_PROBLEM_EXCEPTION, e.getMessage(), null);
+                    OAuth2ErrorCodes.OAuth2SubErrorCodes.UNEXPECTED_SERVER_ERROR, e.getMessage(), null);
             return Response.status(HttpServletResponse.SC_FOUND).location(new URI(errorPageURL)).build();
         } catch (OAuthSystemException e) {
 
@@ -868,7 +868,7 @@ public class OAuth2AuthzEndpoint {
             if (clientDTO.isPkceMandatory()) {
                 if (pkceChallengeCode == null || !OAuth2Util.validatePKCECodeChallenge(pkceChallengeCode, pkceChallengeMethod)) {
                     return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes
-                            .OAuth2SubErrorCodes.INVALID_PCKE_CHALLENGE_CODE, "PKCE is mandatory for this " +
+                            .OAuth2SubErrorCodes.INVALID_PKCE_CHALLENGE_CODE, "PKCE is mandatory for this " +
                             "application. PKCE Challenge is not provided or is not upto RFC 7636 specification.", null);
                 }
             }
@@ -877,7 +877,7 @@ public class OAuth2AuthzEndpoint {
                 if (!OAuthConstants.OAUTH_PKCE_PLAIN_CHALLENGE.equals(pkceChallengeMethod) &&
                         !OAuthConstants.OAUTH_PKCE_S256_CHALLENGE.equals(pkceChallengeMethod)) {
                     return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes
-                                    .OAuth2SubErrorCodes.INVALID_PCKE_CHALLENGE_CODE,
+                                    .OAuth2SubErrorCodes.INVALID_PKCE_CHALLENGE_CODE,
                             "Unsupported PKCE Challenge Method", null);
                 }
             }
@@ -886,7 +886,7 @@ public class OAuth2AuthzEndpoint {
             if (pkceChallengeCode != null && !clientDTO.isPkceSupportPlain()) {
                 if (pkceChallengeMethod == null || OAuthConstants.OAUTH_PKCE_PLAIN_CHALLENGE.equals(pkceChallengeMethod)) {
                     return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes
-                            .OAuth2SubErrorCodes.INVALID_PCKE_CHALLENGE_CODE, "This application " +
+                            .OAuth2SubErrorCodes.INVALID_PKCE_CHALLENGE_CODE, "This application " +
                             "does not support \"plain\" transformation algorithm.", null);
                 }
             }
@@ -894,7 +894,7 @@ public class OAuth2AuthzEndpoint {
             // If PKCE challenge code was sent, check if the code challenge is upto specifications
             if (pkceChallengeCode != null && !OAuth2Util.validatePKCECodeChallenge(pkceChallengeCode, pkceChallengeMethod)) {
                 return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes
-                        .OAuth2SubErrorCodes.INVALID_PCKE_CHALLENGE_CODE, "Code challenge used is not up to RFC " +
+                        .OAuth2SubErrorCodes.INVALID_PKCE_CHALLENGE_CODE, "Code challenge used is not up to RFC " +
                         "7636 specifications.", null);
             }
 

@@ -18,6 +18,7 @@
 
 package org.wso2.carbon.identity.oauth.config;
 
+import com.sun.xml.internal.bind.v2.TODO;
 import org.apache.axiom.om.OMElement;
 import org.apache.axis2.util.JavaUtils;
 import org.apache.commons.lang.StringUtils;
@@ -128,7 +129,7 @@ public class OAuthServerConfiguration {
     private boolean isRefreshTokenRenewalEnabled = true;
     private boolean assertionsUserNameEnabled = false;
     private boolean accessTokenPartitioningEnabled = false;
-    private boolean redirectToOAuthErrorPageEnabled = true;
+    private boolean redirectToRequestedRedirectUriEnabled = false;
     private String accessTokenPartitioningDomains = null;
     private String hashAlgorithm = "SHA-256";
     private TokenPersistenceProcessor persistenceProcessor = null;
@@ -710,8 +711,8 @@ public class OAuthServerConfiguration {
         return accessTokenPartitioningEnabled;
     }
 
-    public boolean isRedirectToOAuthErrorPageEnabled(){
-        return redirectToOAuthErrorPageEnabled;
+    public boolean isRedirectToRequestedRedirectUriEnabled(){
+        return redirectToRequestedRedirectUriEnabled;
     }
 
     public boolean isUserNameAssertionEnabled() {
@@ -1838,9 +1839,9 @@ public class OAuthServerConfiguration {
     private void parseRedirectToOAuthErrorPageConfig(OMElement oauthConfigElem){
         OMElement redirectToOAuthErrorPageElem =
                 oauthConfigElem.getFirstChildWithName(getQNameWithIdentityNS(ConfigElements
-                        .REDIRECT_TO_OAUTH_ERROR_PAGE));
+                        .REDIRECT_TO_REQUESTED_REDIRECT_URI));
         if (redirectToOAuthErrorPageElem != null) {
-            redirectToOAuthErrorPageEnabled =
+            redirectToRequestedRedirectUriEnabled =
                     Boolean.parseBoolean(redirectToOAuthErrorPageElem.getText());
         }
 
@@ -1890,7 +1891,7 @@ public class OAuthServerConfiguration {
         public static final String ENABLE_ASSERTIONS = "EnableAssertions";
         public static final String ENABLE_ASSERTIONS_USERNAME = "UserName";
         public static final String ENABLE_ACCESS_TOKEN_PARTITIONING = "EnableAccessTokenPartitioning";
-        public static final String REDIRECT_TO_OAUTH_ERROR_PAGE = "RedirectToOAuthErrorPage";
+        public static final String REDIRECT_TO_REQUESTED_REDIRECT_URI = "RedirectToRequestedRedirectUri";
         public static final String ACCESS_TOKEN_PARTITIONING_DOMAINS = "AccessTokenPartitioningDomains";
         // OpenIDConnect configurations
         public static final String OPENID_CONNECT = "OpenIDConnect";
