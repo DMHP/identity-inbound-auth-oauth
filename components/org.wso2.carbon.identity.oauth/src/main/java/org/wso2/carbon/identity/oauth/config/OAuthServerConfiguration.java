@@ -298,7 +298,7 @@ public class OAuthServerConfiguration {
         parseShowDisplayNameInConsentPage(oauthElem);
 
         // Read the property for error redirection URI
-        parseRedirectToOAuthErrorPageConfig(oauthElem);
+        parseRedirectToRequestedUriConfig(oauthElem);
     }
 
     private void parseShowDisplayNameInConsentPage(OMElement oauthElem) {
@@ -1835,17 +1835,18 @@ public class OAuthServerConfiguration {
             }
         }
     }
-    private void parseRedirectToOAuthErrorPageConfig(OMElement oauthConfigElem){
-        OMElement redirectToOAuthErrorPageElem =
+    private void parseRedirectToRequestedUriConfig(OMElement oauthConfigElem){
+        OMElement redirectToRequestedRedirectUriElem =
                 oauthConfigElem.getFirstChildWithName(getQNameWithIdentityNS(ConfigElements
                         .REDIRECT_TO_REQUESTED_REDIRECT_URI));
-        if (redirectToOAuthErrorPageElem != null) {
+        if (redirectToRequestedRedirectUriElem != null) {
             redirectToRequestedRedirectUriEnabled =
-                    Boolean.parseBoolean(redirectToOAuthErrorPageElem.getText());
+                    Boolean.parseBoolean(redirectToRequestedRedirectUriElem.getText());
         }
 
         if (log.isDebugEnabled()) {
-            log.debug("Redirecting to OAuth2 Error page is set to : " + redirectToOAuthErrorPageElem);
+            log.debug("Configuration for redirecting errors to the URI given in the request is set to : " +
+                    redirectToRequestedRedirectUriEnabled);
         }
     }
 
