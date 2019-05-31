@@ -61,6 +61,7 @@ import org.wso2.carbon.identity.oauth.cache.SessionDataCacheKey;
 import org.wso2.carbon.identity.oauth.common.OAuth2ErrorCodes;
 import org.wso2.carbon.identity.oauth.common.OAuthConstants;
 import org.wso2.carbon.identity.oauth.common.exception.InvalidOAuthClientException;
+import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.identity.oauth.dao.OAuthAppDO;
 import org.wso2.carbon.identity.oauth.endpoint.OAuthRequestWrapper;
 import org.wso2.carbon.identity.oauth.endpoint.util.EndpointUtil;
@@ -85,6 +86,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.cert.CertificateException;
 import java.text.ParseException;
 import java.util.Arrays;
@@ -104,6 +106,8 @@ import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.HttpHeaders;
+import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response;
 
@@ -119,7 +123,6 @@ public class OAuth2AuthzEndpoint {
     public static final String APPROVE = "approve";
     private boolean isCacheAvailable = false;
 
-    private static final String REDIRECT_URI = "redirect_uri";
     private static final String RESPONSE_MODE_FORM_POST = "form_post";
     private static final String RESPONSE_MODE = "response_mode";
     private static final String AUTHENTICATION_RESULT_ERROR_PARAM_KEY = "AuthenticationError";
@@ -437,7 +440,25 @@ public class OAuth2AuthzEndpoint {
             }
             String errorPageURL = EndpointUtil.getErrorPageURL(request, OAuth2ErrorCodes.INVALID_REQUEST,
                     OAuth2ErrorCodes.OAuth2SubErrorCodes.UNEXPECTED_SERVER_ERROR, e.getMessage(), null);
-            return Response.status(HttpServletResponse.SC_FOUND).location(new URI(errorPageURL)).build();
+            // If the configuration is not enabled, preserve existing redirect error page url
+            if (OAuthServerConfiguration.getInstance().isRedirectToRequestedRedirectUriEnabled()) {
+                return Response.status(HttpServletResponse.SC_FOUND).location(new URI(errorPageURL)).build();
+            } else {
+                String redirectURI = request.getParameter(OAuthConstants.OAuth20Params.REDIRECT_URI);
+
+                if (redirectURI != null) {
+                    try {
+                        errorPageURL = errorPageURL + "&" + OAuthConstants.OAuth20Params.REDIRECT_URI + "=" + URLEncoder
+                                .encode(redirectURI, StandardCharsets.UTF_8.name());
+                    } catch (UnsupportedEncodingException e1) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Error while encoding the error page url", e);
+                        }
+                    }
+                }
+                return Response.status(HttpServletResponse.SC_FOUND).location(new URI(errorPageURL))
+                        .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_TYPE).build();
+            }
         } catch (OAuthSystemException e) {
 
             OAuth2Parameters params = null;

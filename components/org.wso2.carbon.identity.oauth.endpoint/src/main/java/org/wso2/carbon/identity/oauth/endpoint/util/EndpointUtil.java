@@ -287,7 +287,7 @@ public class EndpointUtil {
                 .equals(OAuth2ErrorCodes.OAuth2SubErrorCodes.INVALID_CLIENT)) {
             return getErrorPageURL(request, errorCode, errorMessage, appName);
         } else {
-            String redirectUri = request.getParameter("redirect_uri");
+            String redirectUri = request.getParameter(OAuthConstants.OAuth20Params.REDIRECT_URI);
             try {
                 redirectUri += "?" + OAuthConstants.OAUTH_ERROR_CODE + "=" + URLEncoder.encode(errorCode, "UTF-8") +
                         "&" + OAuthConstants.OAUTH_ERROR_MESSAGE + "=" + URLEncoder.encode(errorMessage, "UTF-8");

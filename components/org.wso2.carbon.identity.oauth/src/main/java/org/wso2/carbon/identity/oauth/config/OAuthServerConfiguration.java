@@ -18,7 +18,6 @@
 
 package org.wso2.carbon.identity.oauth.config;
 
-import com.sun.xml.internal.bind.v2.TODO;
 import org.apache.axiom.om.OMElement;
 import org.apache.axis2.util.JavaUtils;
 import org.apache.commons.lang.StringUtils;
