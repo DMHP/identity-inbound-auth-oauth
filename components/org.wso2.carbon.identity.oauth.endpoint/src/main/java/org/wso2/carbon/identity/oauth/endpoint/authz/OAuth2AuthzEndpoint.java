@@ -61,7 +61,7 @@ import org.wso2.carbon.identity.oauth.cache.SessionDataCacheKey;
 import org.wso2.carbon.identity.oauth.common.OAuth2ErrorCodes;
 import org.wso2.carbon.identity.oauth.common.OAuthConstants;
 import org.wso2.carbon.identity.oauth.common.exception.InvalidOAuthClientException;
-import org.wso2.carbon.identity.oauth.dao.OAuthAppDAO;
+import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.identity.oauth.dao.OAuthAppDO;
 import org.wso2.carbon.identity.oauth.endpoint.OAuthRequestWrapper;
 import org.wso2.carbon.identity.oauth.endpoint.util.EndpointUtil;
@@ -112,7 +112,8 @@ import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response;
 
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.REQUEST_PARAM_SP;
-import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.RequestParams.TENANT_DOMAIN;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.RequestParams
+        .TENANT_DOMAIN;
 import static org.wso2.carbon.identity.core.util.IdentityUtil.convertPEMEncodedContentToCertificate;
 
 @Path("/authorize")
@@ -122,7 +123,6 @@ public class OAuth2AuthzEndpoint {
     public static final String APPROVE = "approve";
     private boolean isCacheAvailable = false;
 
-    private static final String REDIRECT_URI = "redirect_uri";
     private static final String RESPONSE_MODE_FORM_POST = "form_post";
     private static final String RESPONSE_MODE = "response_mode";
     private static final String AUTHENTICATION_RESULT_ERROR_PARAM_KEY = "AuthenticationError";
@@ -179,8 +179,8 @@ public class OAuth2AuthzEndpoint {
                         "attribute, and both have non NULL objects in cache");
             }
             return Response.status(HttpServletResponse.SC_FOUND).location(new URI(EndpointUtil.getErrorPageURL
-                    (request, OAuth2ErrorCodes.INVALID_REQUEST, "Invalid authorization " +
-                            "request", null))).build();
+                    (request, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes.OAuth2SubErrorCodes
+                            .INVALID_AUTHORIZATION_REQUEST, "Invalid authorization request", null))).build();
 
         } else if (clientId == null && resultFromLogin == null && resultFromConsent == null) {
 
@@ -189,16 +189,16 @@ public class OAuth2AuthzEndpoint {
                         "attribute, and client_id parameter cannot be found in request");
             }
             return Response.status(HttpServletResponse.SC_FOUND).location(new URI(EndpointUtil.getErrorPageURL
-                    (request, OAuth2ErrorCodes.INVALID_REQUEST, "Invalid authorization " +
-                                    "request", null))).build();
+                    (request, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes.OAuth2SubErrorCodes
+                            .INVALID_AUTHORIZATION_REQUEST, "Invalid authorization request", null))).build();
 
         } else if (sessionDataKeyFromLogin != null && resultFromLogin == null) {
             if (log.isDebugEnabled()) {
                 log.debug("Session data not found in SessionDataCache for " + sessionDataKeyFromLogin);
             }
             return Response.status(HttpServletResponse.SC_FOUND).location(new URI(EndpointUtil.getErrorPageURL
-                    (request, OAuth2ErrorCodes.ACCESS_DENIED, "Session Timed Out", null)))
-                    .build();
+                    (request, OAuth2ErrorCodes.ACCESS_DENIED, OAuth2ErrorCodes.OAuth2SubErrorCodes.SESSION_TIME_OUT,
+                            "Session Timed Out", null))).build();
 
         } else if (sessionDataKeyFromConsent != null && resultFromConsent == null) {
 
@@ -207,8 +207,8 @@ public class OAuth2AuthzEndpoint {
                     log.debug("Session data not found in SessionDataCache for " + sessionDataKeyFromConsent);
                 }
                 return Response.status(HttpServletResponse.SC_FOUND).location(new URI(EndpointUtil.getErrorPageURL
-                        (request, OAuth2ErrorCodes.ACCESS_DENIED, "Session Timed Out",
-                                null))).build();
+                        (request, OAuth2ErrorCodes.ACCESS_DENIED, OAuth2ErrorCodes.OAuth2SubErrorCodes
+                                .SESSION_TIME_OUT, "Session Timed Out", null))).build();
             } else {
                 sessionDataKeyFromConsent = null;
             }
@@ -343,9 +343,9 @@ public class OAuth2AuthzEndpoint {
                                 "corresponding AuthenticationResult does not exist in the cache.");
                     }
                     return Response.status(HttpServletResponse.SC_FOUND).location(new URI(EndpointUtil
-                            .getErrorPageURL(request, OAuth2ErrorCodes.INVALID_REQUEST, "Invalid authorization " +
+                            .getErrorPageURL(request, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes
+                                    .OAuth2SubErrorCodes.INVALID_AUTHORIZATION_REQUEST, "Invalid authorization " +
                                     "request", appName))).build();
-
                 }
 
             } else if (resultFromConsent != null) { // Consent submission
@@ -417,8 +417,9 @@ public class OAuth2AuthzEndpoint {
                                 "parameter could not be found in request");
                     }
                     return Response.status(HttpServletResponse.SC_FOUND).location(new URI(
-                            EndpointUtil.getErrorPageURL(request, OAuth2ErrorCodes.INVALID_REQUEST, "Invalid " +
-                                    "authorization request", appName))).build();
+                            EndpointUtil.getErrorPageURL(request, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes
+                                    .OAuth2SubErrorCodes.INVALID_AUTHORIZATION_REQUEST, "Invalid authorization " +
+                                    "request", appName))).build();
                 }
 
             } else { // Invalid request
@@ -427,7 +428,9 @@ public class OAuth2AuthzEndpoint {
                 }
 
                 return Response.status(HttpServletResponse.SC_FOUND).location(new URI(EndpointUtil.getErrorPageURL
-                        (request, OAuth2ErrorCodes.INVALID_REQUEST, "Invalid authorization request", null))).build();
+                        (request, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes.OAuth2SubErrorCodes
+                                        .INVALID_AUTHORIZATION_REQUEST, "Invalid authorization request",
+                                null))).build();
             }
 
         } catch (OAuthProblemException e) {
@@ -436,22 +439,26 @@ public class OAuth2AuthzEndpoint {
                 log.debug(e.getError(), e);
             }
             String errorPageURL = EndpointUtil.getErrorPageURL(request, OAuth2ErrorCodes.INVALID_REQUEST,
-                    e.getMessage(), null);
-            String redirectURI = request.getParameter(REDIRECT_URI);
+                    OAuth2ErrorCodes.OAuth2SubErrorCodes.UNEXPECTED_SERVER_ERROR, e.getMessage(), null);
+            // If the configuration is not enabled, preserve existing redirect error page url
+            if (OAuthServerConfiguration.getInstance().isRedirectToRequestedRedirectUriEnabled()) {
+                return Response.status(HttpServletResponse.SC_FOUND).location(new URI(errorPageURL)).build();
+            } else {
+                String redirectURI = request.getParameter(OAuthConstants.OAuth20Params.REDIRECT_URI);
 
-            if (redirectURI != null) {
-                try {
-                    errorPageURL = errorPageURL + "&" + REDIRECT_URI + "=" + URLEncoder
-                            .encode(redirectURI, StandardCharsets.UTF_8.name());
-                } catch (UnsupportedEncodingException e1) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Error while encoding the error page url", e);
+                if (redirectURI != null) {
+                    try {
+                        errorPageURL = errorPageURL + "&" + OAuthConstants.OAuth20Params.REDIRECT_URI + "=" + URLEncoder
+                                .encode(redirectURI, StandardCharsets.UTF_8.name());
+                    } catch (UnsupportedEncodingException e1) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Error while encoding the error page url", e);
+                        }
                     }
                 }
+                return Response.status(HttpServletResponse.SC_FOUND).location(new URI(errorPageURL))
+                        .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_TYPE).build();
             }
-            return Response.status(HttpServletResponse.SC_FOUND).location(new URI(errorPageURL))
-                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_TYPE).build();
-
         } catch (OAuthSystemException e) {
 
             OAuth2Parameters params = null;
@@ -814,20 +821,23 @@ public class OAuth2AuthzEndpoint {
             if (log.isDebugEnabled()) {
                 log.debug("Client Id is not present in the authorization request");
             }
-            return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, "Client Id is not present in " +
-                    "the authorization request", null);
+            return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes
+                    .OAuth2SubErrorCodes.INVALID_CLIENT, "Client Id is not present in the authorization " +
+                    "request", null);
         } else if (StringUtils.isBlank(redirectUri)) {
             if (log.isDebugEnabled()) {
                 log.debug("Redirect URI is not present in the authorization request");
             }
-            return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, "Redirect URI is not present " +
+            return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes
+                    .OAuth2SubErrorCodes.INVALID_REDIRECT_URI, "Redirect URI is not present " +
                     "in the authorization request", null);
         } else {
             clientDTO = validateClient(clientId, redirectUri);
         }
 
         if (!clientDTO.isValidClient()) {
-            return EndpointUtil.getErrorPageURL(req, clientDTO.getErrorCode(), clientDTO.getErrorMsg(), null);
+            return EndpointUtil.getErrorPageURL(req, clientDTO.getErrorCode(), OAuth2ErrorCodes.OAuth2SubErrorCodes
+                    .INVALID_CLIENT, clientDTO.getErrorMsg(), null);
         }
 
         // Now the client is valid, redirect him to the authorization page.
@@ -844,8 +854,8 @@ public class OAuth2AuthzEndpoint {
             } catch (CertificateException e) {
                 log.error("An error occurred while build a certificate object from the PEM content for the " +
                         "service provider : " + serviceProvider.getApplicationName());
-                return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.SERVER_ERROR,
-                        "A certificate error occurred.", null);
+                return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.SERVER_ERROR, OAuth2ErrorCodes
+                        .OAuth2SubErrorCodes.CERTIFICATE_ERROR, "A certificate error occurred.", null);
             }
         }
 
@@ -878,34 +888,36 @@ public class OAuth2AuthzEndpoint {
             // Check if PKCE is mandatory for the application
             if (clientDTO.isPkceMandatory()) {
                 if (pkceChallengeCode == null || !OAuth2Util.validatePKCECodeChallenge(pkceChallengeCode, pkceChallengeMethod)) {
-                    return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, "PKCE is mandatory " +
-                            "for this application. PKCE Challenge is not provided or is not upto RFC 7636 " +
-                            "specification.", null);
+                    return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes
+                            .OAuth2SubErrorCodes.INVALID_PKCE_CHALLENGE_CODE, "PKCE is mandatory for this " +
+                            "application. PKCE Challenge is not provided or is not upto RFC 7636 specification.", null);
                 }
             }
             //Check if the code challenge method value is neither "plain" or "s256", if so return error
             if (pkceChallengeCode != null && pkceChallengeMethod != null) {
                 if (!OAuthConstants.OAUTH_PKCE_PLAIN_CHALLENGE.equals(pkceChallengeMethod) &&
                         !OAuthConstants.OAUTH_PKCE_S256_CHALLENGE.equals(pkceChallengeMethod)) {
-                    return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, "Unsupported PKCE " +
-                            "Challenge Method", null);
+                    return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes
+                                    .OAuth2SubErrorCodes.INVALID_PKCE_CHALLENGE_CODE,
+                            "Unsupported PKCE Challenge Method", null);
                 }
             }
 
             // Check if "plain" transformation algorithm is disabled for the application
             if (pkceChallengeCode != null && !clientDTO.isPkceSupportPlain()) {
                 if (pkceChallengeMethod == null || OAuthConstants.OAUTH_PKCE_PLAIN_CHALLENGE.equals(pkceChallengeMethod)) {
-                    return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, "This application " +
+                    return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes
+                            .OAuth2SubErrorCodes.INVALID_PKCE_CHALLENGE_CODE, "This application " +
                             "does not support \"plain\" transformation algorithm.", null);
                 }
             }
 
             // If PKCE challenge code was sent, check if the code challenge is upto specifications
             if (pkceChallengeCode != null && !OAuth2Util.validatePKCECodeChallenge(pkceChallengeCode, pkceChallengeMethod)) {
-                return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, "Code challenge used is " +
-                        "not up to RFC 7636 specifications.", null);
+                return EndpointUtil.getErrorPageURL(req, OAuth2ErrorCodes.INVALID_REQUEST, OAuth2ErrorCodes
+                        .OAuth2SubErrorCodes.INVALID_PKCE_CHALLENGE_CODE, "Code challenge used is not up to RFC " +
+                        "7636 specifications.", null);
             }
-
 
         }
         params.setPkceCodeChallenge(pkceChallengeCode);
@@ -937,7 +949,8 @@ public class OAuth2AuthzEndpoint {
             handleOIDCRequestObject(oauthRequest, params);
         } catch (RequestObjectException e) {
             // All the error logs are specified at the time when throw the exception.
-            return EndpointUtil.getErrorPageURL(req, e.getErrorCode(), e.getErrorMessage(), null);
+            return EndpointUtil.getErrorPageURL(req, e.getErrorCode(), OAuth2ErrorCodes.OAuth2SubErrorCodes
+                    .INVALID_REQUEST_OBJECT, e.getErrorMessage(), null);
         }
         String prompt = oauthRequest.getParam(OAuthConstants.OAuth20Params.PROMPT);
         params.setPrompt(prompt);
