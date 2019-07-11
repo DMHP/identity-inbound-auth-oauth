@@ -710,7 +710,8 @@ public class OAuthServerConfiguration {
         return accessTokenPartitioningEnabled;
     }
 
-    public boolean isRedirectToRequestedRedirectUriEnabled(){
+    public boolean isRedirectToRequestedRedirectUriEnabled() {
+
         return redirectToRequestedRedirectUriEnabled;
     }
 
@@ -1835,7 +1836,9 @@ public class OAuthServerConfiguration {
             }
         }
     }
-    private void parseRedirectToRequestedUriConfig(OMElement oauthConfigElem){
+
+    private void parseRedirectToRequestedUriConfig(OMElement oauthConfigElem) {
+
         OMElement redirectToRequestedRedirectUriElem =
                 oauthConfigElem.getFirstChildWithName(getQNameWithIdentityNS(ConfigElements
                         .REDIRECT_TO_REQUESTED_REDIRECT_URI));
