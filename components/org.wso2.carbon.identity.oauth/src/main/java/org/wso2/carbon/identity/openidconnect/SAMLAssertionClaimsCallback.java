@@ -149,11 +149,11 @@ public class SAMLAssertionClaimsCallback implements CustomClaimsCallbackHandler 
             throws OAuthSystemException {
 
         Map<ClaimMapping, String> userAttributes =
-                getUserAttributesFromCache(requestMsgCtx.getProperty(OAuthConstants.ACCESS_TOKEN).toString());
+                getUserAttributesFromCacheUsingToken(requestMsgCtx.getProperty(OAuthConstants.ACCESS_TOKEN).toString());
         Map<String, Object> claims = Collections.emptyMap();
 
         if (MapUtils.isEmpty(userAttributes) && requestMsgCtx.getProperty(OAuthConstants.AUTHZ_CODE) != null) {
-            userAttributes = getUserAttributesFromCache(
+            userAttributes = getUserAttributesFromCacheUsingCode(
                     requestMsgCtx.getProperty(OAuthConstants.AUTHZ_CODE).toString());
         }
 
@@ -173,6 +173,43 @@ public class SAMLAssertionClaimsCallback implements CustomClaimsCallbackHandler 
         String tenantDomain = requestMsgCtx.getOauth2AccessTokenReqDTO().getTenantDomain();
         return getEssentialClaims(requestMsgCtx.getScope(), tenantDomain, claims, (RequestObject) requestMsgCtx.
                 getProperty(REQUEST_OBJECT), requestMsgCtx.getOauth2AccessTokenReqDTO().getGrantType());
+    }
+
+    /**
+     * Get user attribute cached against the access token
+     *
+     * @param accessToken Access token
+     * @return User attributes cached against the access token
+     */
+    private Map<ClaimMapping, String> getUserAttributesFromCacheUsingToken(String accessToken) {
+
+        if (log.isDebugEnabled()) {
+            log.debug("Retrieving user attributes cached against access token.");
+        }
+
+        AuthorizationGrantCacheKey cacheKey = new AuthorizationGrantCacheKey(accessToken);
+        AuthorizationGrantCacheEntry cacheEntry = AuthorizationGrantCache.getInstance()
+                .getValueFromCacheByToken(cacheKey);
+
+        return cacheEntry == null ? new HashMap<ClaimMapping, String>() : cacheEntry.getUserAttributes();
+    }
+
+    /**
+     * Get user attributes cached against the authorization code
+     *
+     * @param authorizationCode Authorization Code
+     * @return User attributes cached against the authorization code
+     */
+    private Map<ClaimMapping, String> getUserAttributesFromCacheUsingCode(String authorizationCode) {
+
+        if (log.isDebugEnabled()) {
+            log.debug("Retrieving user attributes cached against authorization code.");
+        }
+
+        AuthorizationGrantCacheKey cacheKey = new AuthorizationGrantCacheKey(authorizationCode);
+        AuthorizationGrantCacheEntry cacheEntry =
+                AuthorizationGrantCache.getInstance().getValueFromCacheByCode(cacheKey);
+        return cacheEntry == null ? new HashMap<ClaimMapping, String>() : cacheEntry.getUserAttributes();
     }
 
     private Map<String, Object> getResponse(OAuthAuthzReqMessageContext requestMsgCtx)
