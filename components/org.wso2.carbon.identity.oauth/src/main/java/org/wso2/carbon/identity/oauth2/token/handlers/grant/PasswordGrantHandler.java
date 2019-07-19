@@ -24,6 +24,7 @@ import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.CarbonConstants;
 import org.wso2.carbon.base.MultitenantConstants;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
+import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
 import org.wso2.carbon.identity.application.common.IdentityApplicationManagementException;
 import org.wso2.carbon.identity.application.common.model.ServiceProvider;
 import org.wso2.carbon.identity.base.IdentityException;
@@ -37,9 +38,13 @@ import org.wso2.carbon.identity.oauth2.token.OAuthTokenReqMessageContext;
 import org.wso2.carbon.identity.oauth2.util.OAuth2Util;
 import org.wso2.carbon.user.api.UserStoreException;
 import org.wso2.carbon.user.api.UserStoreManager;
+import org.wso2.carbon.user.core.config.UserStorePreferenceOrderSupplier;
+import org.wso2.carbon.user.core.model.UserMgtContext;
 import org.wso2.carbon.user.core.service.RealmService;
 import org.wso2.carbon.user.core.util.UserCoreUtil;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
+
+import java.util.List;
 
 /**
  * Handles the Password Grant Type of the OAuth 2.0 specification. Resource owner sends his
@@ -97,6 +102,17 @@ public class PasswordGrantHandler extends AbstractAuthorizationGrantHandler {
         UserStoreManager userStoreManager = null;
         boolean authStatus;
         try {
+            // Get the user store preference order supplier.
+            UserStorePreferenceOrderSupplier<List<String>> userStorePreferenceOrderSupplier =
+                    FrameworkUtils.getUserStorePreferenceOrderSupplier(null, serviceProvider);
+            UserMgtContext userMgtContext = new UserMgtContext();
+            userMgtContext.setUserStorePreferenceOrderSupplier(userStorePreferenceOrderSupplier);
+            if (userStorePreferenceOrderSupplier != null) {
+                UserCoreUtil.setUserMgtContextInThreadLocal(userMgtContext);
+                if (log.isDebugEnabled()) {
+                    log.debug("UserMgtContext had been set as the thread local.");
+                }
+            }
             userStoreManager = realmService.getTenantUserRealm(tenantId).getUserStoreManager();
             authStatus = userStoreManager.authenticate(tenantAwareUserName, oAuth2AccessTokenReqDTO.getResourceOwnerPassword());
 
@@ -118,6 +134,11 @@ public class PasswordGrantHandler extends AbstractAuthorizationGrantHandler {
                 message = identityException.getErrorCode() + " " + e.getMessage();
             }
             throw new IdentityOAuth2Exception(message, e);
+        }  finally {
+            UserCoreUtil.removeUserMgtContextInThreadLocal();
+            if (log.isDebugEnabled()) {
+                log.debug("UserMgtContext had been remove from the thread local.");
+            }
         }
         if (authStatus) {
             if (!username.contains(CarbonConstants.DOMAIN_SEPARATOR) && StringUtils.isNotBlank(UserCoreUtil
