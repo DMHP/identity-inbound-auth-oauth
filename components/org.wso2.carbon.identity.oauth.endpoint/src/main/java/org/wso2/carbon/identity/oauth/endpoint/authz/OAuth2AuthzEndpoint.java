@@ -450,9 +450,9 @@ public class OAuth2AuthzEndpoint {
                     try {
                         errorPageURL = errorPageURL + "&" + OAuthConstants.OAuth20Params.REDIRECT_URI + "=" + URLEncoder
                                 .encode(redirectURI, StandardCharsets.UTF_8.name());
-                    } catch (UnsupportedEncodingException e1) {
+                    } catch (UnsupportedEncodingException encodingException) {
                         if (log.isDebugEnabled()) {
-                            log.debug("Error while encoding the error page url", e);
+                            log.debug("Error while encoding the error page url", encodingException);
                         }
                     }
                 }

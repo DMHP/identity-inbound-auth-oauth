@@ -70,6 +70,7 @@ import static org.wso2.carbon.identity.oauth2.util.OAuth2Util.getRedirectURL;
 public class EndpointUtil {
 
     private static final Log log = LogFactory.getLog(EndpointUtil.class);
+    private static final String UTF_8 = "UTF-8";
 
     private EndpointUtil() {
 
@@ -218,8 +219,8 @@ public class EndpointUtil {
 
         String errorPageUrl = OAuth2Util.OAuthURL.getOAuth2ErrorPageUrl();
         try {
-            errorPageUrl += "?" + OAuthConstants.OAUTH_ERROR_CODE + "=" + URLEncoder.encode(errorCode, "UTF-8") +
-                    "&" + OAuthConstants.OAUTH_ERROR_MESSAGE + "=" + URLEncoder.encode(errorMessage, "UTF-8");
+            errorPageUrl += "?" + OAuthConstants.OAUTH_ERROR_CODE + "=" + URLEncoder.encode(errorCode, UTF_8) + "&" +
+                    OAuthConstants.OAUTH_ERROR_MESSAGE + "=" + URLEncoder.encode(errorMessage, UTF_8);
         } catch (UnsupportedEncodingException e) {
             //ignore
             if (log.isDebugEnabled()){
@@ -229,7 +230,7 @@ public class EndpointUtil {
 
         if (appName != null) {
             try {
-                errorPageUrl += "application" + "=" + URLEncoder.encode(appName, "UTF-8");
+                errorPageUrl += "application" + "=" + URLEncoder.encode(appName, UTF_8);
             } catch (UnsupportedEncodingException e) {
                 //ignore
                 if (log.isDebugEnabled()){
@@ -280,6 +281,7 @@ public class EndpointUtil {
      */
     public static String getErrorPageURL(HttpServletRequest request, String errorCode, String subErrorCode, String
             errorMessage, String appName) {
+
         // Preserves the existing behaviour if the RedirectToRequestedRedirectUri property is not configured or set to false.
         if (!OAuthServerConfiguration.getInstance().isRedirectToRequestedRedirectUriEnabled()) {
             return getErrorPageURL(request, errorCode, errorMessage, appName);
@@ -289,10 +291,10 @@ public class EndpointUtil {
         } else {
             String redirectUri = request.getParameter(OAuthConstants.OAuth20Params.REDIRECT_URI);
             try {
-                redirectUri += "?" + OAuthConstants.OAUTH_ERROR_CODE + "=" + URLEncoder.encode(errorCode, "UTF-8") +
-                        "&" + OAuthConstants.OAUTH_ERROR_MESSAGE + "=" + URLEncoder.encode(errorMessage, "UTF-8");
+                redirectUri += "?" + OAuthConstants.OAUTH_ERROR_CODE + "=" + URLEncoder.encode(errorCode, UTF_8) +
+                        "&" + OAuthConstants.OAUTH_ERROR_MESSAGE + "=" + URLEncoder.encode(errorMessage, UTF_8);
             } catch (UnsupportedEncodingException e) {
-                //ignore
+                // Ignored. This exception will never occur since a supported character encoding algorithm is passed.
                 if (log.isDebugEnabled()) {
                     log.debug("Error while encoding the error page url", e);
                 }
@@ -427,7 +429,7 @@ public class EndpointUtil {
                     append("?").
                     append(FrameworkConstants.SESSION_DATA_KEY).
                     append("=").
-                    append(URLEncoder.encode(sessionDataKey, "UTF-8")).
+                    append(URLEncoder.encode(sessionDataKey, UTF_8)).
                     append("&").
                     append(FrameworkConstants.RequestParams.TYPE).
                     append("=").
@@ -492,7 +494,7 @@ public class EndpointUtil {
             } else {
                 sessionDataCache.addToCache(new SessionDataCacheKey(sessionDataKeyConsent),entry);
                 if (entry.getQueryString() != null) {
-                    queryString = URLEncoder.encode(entry.getQueryString(), "UTF-8");
+                    queryString = URLEncoder.encode(entry.getQueryString(), UTF_8);
                 }
             }
 
@@ -503,19 +505,19 @@ public class EndpointUtil {
                 consentPage = OAuth2Util.OAuthURL.getOAuth2ConsentPageUrl();
             }
             if (params != null) {
-                consentPage += "?" + OAuthConstants.OIDC_LOGGED_IN_USER + "=" + URLEncoder.encode(loggedInUser,
-                        "UTF-8") + "&application=";
+                consentPage += "?" + OAuthConstants.OIDC_LOGGED_IN_USER + "=" + URLEncoder.encode(loggedInUser, UTF_8) +
+                        "&application=";
 
                 if (StringUtils.isNotEmpty(params.getDisplayName())) {
-                    consentPage += URLEncoder.encode(params.getDisplayName(), "UTF-8");
+                    consentPage += URLEncoder.encode(params.getDisplayName(), UTF_8);
                 } else {
-                    consentPage += URLEncoder.encode(params.getApplicationName(), "UTF-8");
+                    consentPage += URLEncoder.encode(params.getApplicationName(), UTF_8);
                 }
 
                 consentPage += "&tenantDomain=" + getTenantDomainFromClientId(params.getClientId());
                 consentPage = consentPage + "&" + OAuthConstants.OAuth20Params.SCOPE + "=" + URLEncoder.encode
-                        (EndpointUtil.getScope(params), "UTF-8") + "&" + OAuthConstants.SESSION_DATA_KEY_CONSENT
-                        + "=" + URLEncoder.encode(sessionDataKeyConsent, "UTF-8") + "&spQueryParams=" + queryString;
+                        (EndpointUtil.getScope(params), UTF_8) + "&" + OAuthConstants.SESSION_DATA_KEY_CONSENT + "="
+                        + URLEncoder.encode(sessionDataKeyConsent, UTF_8) + "&spQueryParams=" + queryString;
             } else {
                 throw new OAuthSystemException("Error while retrieving the application name");
             }
