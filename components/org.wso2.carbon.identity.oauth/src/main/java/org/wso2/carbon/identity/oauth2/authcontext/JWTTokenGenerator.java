@@ -30,6 +30,7 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.PlainJWT;
 import com.nimbusds.jwt.SignedJWT;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.io.Charsets;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
@@ -37,10 +38,14 @@ import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.base.MultitenantConstants;
 import org.wso2.carbon.core.util.KeyStoreManager;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
+import org.wso2.carbon.identity.application.common.model.ClaimMapping;
 import org.wso2.carbon.identity.base.IdentityException;
 import org.wso2.carbon.identity.core.util.IdentityCoreConstants;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
+import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCache;
+import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCacheEntry;
+import org.wso2.carbon.identity.oauth.cache.AuthorizationGrantCacheKey;
 import org.wso2.carbon.identity.oauth.common.exception.InvalidOAuthClientException;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.identity.oauth.dao.OAuthAppDAO;
@@ -71,13 +76,16 @@ import java.security.MessageDigest;
 import java.security.cert.Certificate;
 import java.security.interfaces.RSAPrivateKey;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.StringTokenizer;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -255,6 +263,32 @@ public class JWTTokenGenerator implements AuthorizationContextTokenGenerator {
 
                 ClaimMetaDataCache.getInstance().addToCache(new ClaimMetaDataCacheKey(authenticatedUser),
                         new ClaimMetaDataCacheEntry(cacheKey));
+            } else {
+                // This is to obtain the user claims of federated user
+                AuthorizationGrantCacheKey authorizationGrantCacheKey =
+                        new AuthorizationGrantCacheKey(messageContext.getRequestDTO().getAccessToken().getIdentifier());
+                AuthorizationGrantCacheEntry authorizationGrantCacheEntry =
+                        AuthorizationGrantCache.getInstance().getValueFromCacheByToken(authorizationGrantCacheKey);
+
+                Map<ClaimMapping, String> userAttributes = new HashMap<>();
+                Map<String, String> claimMap = new HashMap<>();
+                if (authorizationGrantCacheEntry != null) {
+                    userAttributes = authorizationGrantCacheEntry.getUserAttributes();
+                }
+
+                if (MapUtils.isNotEmpty(userAttributes)) {
+                    for (Map.Entry<ClaimMapping, String> entry : userAttributes.entrySet()) {
+                        String claimURI = entry.getKey().getRemoteClaim().getClaimUri();
+                        if (requestedClaims != null) {
+                            if (Arrays.asList(requestedClaims).contains(claimURI)) {
+                                claimMap.put(claimURI, entry.getValue());
+                            }
+                        } else {
+                            claimMap.put(entry.getKey().getRemoteClaim().getClaimUri(), entry.getValue());
+                        }
+                    }
+                    claimValues = new TreeMap(claimMap);
+                }
             }
 
             if (isExistingUser) {
