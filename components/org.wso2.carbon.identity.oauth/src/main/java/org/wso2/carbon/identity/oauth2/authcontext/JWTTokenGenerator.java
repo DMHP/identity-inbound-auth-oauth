@@ -264,7 +264,7 @@ public class JWTTokenGenerator implements AuthorizationContextTokenGenerator {
                 ClaimMetaDataCache.getInstance().addToCache(new ClaimMetaDataCacheKey(authenticatedUser),
                         new ClaimMetaDataCacheEntry(cacheKey));
             } else {
-                // This is to obtain the user claims of federated user
+                // This is to obtain the user claims of federated user provisioned to secondary userstore.
                 AuthorizationGrantCacheKey authorizationGrantCacheKey =
                         new AuthorizationGrantCacheKey(messageContext.getRequestDTO().getAccessToken().getIdentifier());
                 AuthorizationGrantCacheEntry authorizationGrantCacheEntry =
@@ -276,19 +276,17 @@ public class JWTTokenGenerator implements AuthorizationContextTokenGenerator {
                     userAttributes = authorizationGrantCacheEntry.getUserAttributes();
                 }
 
-                if (MapUtils.isNotEmpty(userAttributes)) {
-                    for (Map.Entry<ClaimMapping, String> entry : userAttributes.entrySet()) {
-                        String claimURI = entry.getKey().getRemoteClaim().getClaimUri();
-                        if (requestedClaims != null) {
-                            if (Arrays.asList(requestedClaims).contains(claimURI)) {
-                                claimMap.put(claimURI, entry.getValue());
-                            }
-                        } else {
-                            claimMap.put(entry.getKey().getRemoteClaim().getClaimUri(), entry.getValue());
+                for (Map.Entry<ClaimMapping, String> entry : userAttributes.entrySet()) {
+                    String claimURI = entry.getKey().getRemoteClaim().getClaimUri();
+                    if (requestedClaims != null) {
+                        if (Arrays.asList(requestedClaims).contains(claimURI)) {
+                            claimMap.put(claimURI, entry.getValue());
                         }
+                    } else {
+                        claimMap.put(claimURI, entry.getValue());
                     }
-                    claimValues = new TreeMap(claimMap);
                 }
+                claimValues = new TreeMap(claimMap);
             }
 
             if (isExistingUser) {
