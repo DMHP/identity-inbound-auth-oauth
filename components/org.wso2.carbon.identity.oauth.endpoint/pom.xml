@@ -99,6 +99,11 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
+            <groupId>org.apache.cxf</groupId>
+            <artifactId>cxf-rt-frontend-jaxrs</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>com.thetransactioncompany.wso2</groupId>
             <artifactId>cors-filter</artifactId>
         </dependency>
@@ -148,11 +153,6 @@
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.glassfish.jersey.core</groupId>
-            <artifactId>jersey-common</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
