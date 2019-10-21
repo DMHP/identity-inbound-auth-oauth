@@ -235,7 +235,9 @@ public class OAuth2TokenEndpoint {
                 }
 
             } catch (OAuthProblemException e) {
-                log.error("Error while creating the Carbon OAuth token request", e);
+                if (log.isDebugEnabled()) {
+                    log.debug("Error while creating the Carbon OAuth token request.", e);
+                }
                 OAuthResponse res = OAuthASResponse
                         .errorResponse(HttpServletResponse.SC_BAD_REQUEST).error(e)
                         .buildJSONMessage();
