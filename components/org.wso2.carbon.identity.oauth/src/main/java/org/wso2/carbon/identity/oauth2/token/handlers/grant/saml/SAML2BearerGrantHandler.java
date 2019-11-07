@@ -27,7 +27,12 @@ import org.apache.commons.logging.LogFactory;
 import org.joda.time.DateTime;
 import org.opensaml.DefaultBootstrap;
 import org.opensaml.common.xml.SAMLConstants;
-import org.opensaml.saml2.core.*;
+import org.opensaml.saml2.core.SubjectConfirmation;
+import org.opensaml.saml2.core.Assertion;
+import org.opensaml.saml2.core.Audience;
+import org.opensaml.saml2.core.AudienceRestriction;
+import org.opensaml.saml2.core.SubjectConfirmationData;
+import org.opensaml.saml2.core.Conditions;
 import org.opensaml.security.SAMLSignatureProfileValidator;
 import org.opensaml.xml.ConfigurationException;
 import org.opensaml.xml.XMLObject;
@@ -163,12 +168,11 @@ public class SAML2BearerGrantHandler extends AbstractAuthorizationGrantHandler {
 
         Assertion assertion = getAssertionObject(tokReqMsgCtx);
         String tenantDomain = tokReqMsgCtx.getOauth2AccessTokenReqDTO().getTenantDomain();
-        IdentityProvider identityProvider = getIdentityProvider(assertion,tenantDomain);
+        IdentityProvider identityProvider = null;
         String tokenEndpointAlias = null;
         if (tenantDomain == null || "".equals(tenantDomain)) {
             tenantDomain = MultitenantConstants.SUPER_TENANT_DOMAIN_NAME;
         }
-
 
         // Logging the SAML token
         if (log.isDebugEnabled() && IdentityUtil.isTokenLoggable(IdentityConstants.IdentityTokens.SAML_ASSERTION)) {
@@ -264,10 +268,7 @@ public class SAML2BearerGrantHandler extends AbstractAuthorizationGrantHandler {
         validateAssertionTimeWindow(timestampSkewInMillis, getNotOnOrAfter(assertion), getNotBefore(assertion));
         processSubjectConfirmation(tokReqMsgCtx, assertion, identityProvider, tenantDomain, timestampSkewInMillis);
 
-
         validateTokenEPAlias(identityProvider,tokenEndpointAlias,tenantDomain);
-
-
 
         /*
           The <Subject> element MUST contain at least one <SubjectConfirmation> element that allows the
@@ -284,7 +285,6 @@ public class SAML2BearerGrantHandler extends AbstractAuthorizationGrantHandler {
           attribute limiting the client address from which the Assertion can be delivered.  Verification of the
           Address is at the discretion of the authorization server.
          */
-
 
         /*
           The authorization server MUST verify that the NotOnOrAfter instant has not passed, subject to allowable
@@ -715,7 +715,7 @@ public class SAML2BearerGrantHandler extends AbstractAuthorizationGrantHandler {
     }
 
     private void validateAssertionList(XMLObject samlObject) throws IdentityOAuth2Exception {
-        NodeList assertionList = samlObject.getDOM().getElementsByTagNameNS(SAMLConstants.SAML20_NS, "Assertion");
+        NodeList assertionList = samlObject.getDOM().getElementsByTagNameNS(SAMLConstants.SAML20_NS, "ASSERTION_ELEMENT");
         if (assertionList.getLength() > 0) {
             throw new IdentityOAuth2Exception("Nested assertions found in request");
         }
