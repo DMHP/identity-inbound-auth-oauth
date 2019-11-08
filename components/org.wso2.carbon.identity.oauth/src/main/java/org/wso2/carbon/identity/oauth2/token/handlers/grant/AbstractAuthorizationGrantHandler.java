@@ -176,6 +176,7 @@ public abstract class AbstractAuthorizationGrantHandler implements Authorization
                             tokenRespDTO.setExpiresInMillis(Long.MAX_VALUE);
                         }
                         tokReqMsgCtx.addProperty(EXISTING_TOKEN_ISSUED, true);
+                        setDetailsToMessageContext(tokReqMsgCtx, existingAccessTokenDO);
                         return tokenRespDTO;
                     } else {
 
@@ -270,6 +271,7 @@ public abstract class AbstractAuthorizationGrantHandler implements Authorization
                                     .getCacheKeyString());
                         }
                     }
+                    setDetailsToMessageContext(tokReqMsgCtx, existingAccessTokenDO);
                     return tokenRespDTO;
                 } else {
                     if (log.isDebugEnabled() && IdentityUtil.isTokenLoggable(IdentityConstants.IdentityTokens.ACCESS_TOKEN)) {
@@ -454,6 +456,20 @@ public abstract class AbstractAuthorizationGrantHandler implements Authorization
             tokenRespDTO.setAuthorizedScopes(scope);
             return tokenRespDTO;
         }
+    }
+
+    private void setDetailsToMessageContext(OAuthTokenReqMessageContext tokReqMsgCtx, AccessTokenDO existingToken) {
+
+        // Set access token and refresh token  issued time, this is needed by downstream handlers.
+        if (existingToken.getIssuedTime() != null) {
+            tokReqMsgCtx.setAccessTokenIssuedTime(existingToken.getIssuedTime().getTime());
+        }
+
+        if (existingToken.getRefreshTokenIssuedTime() != null) {
+            tokReqMsgCtx.setRefreshTokenIssuedTime(existingToken.getRefreshTokenIssuedTime().getTime());
+        }
+
+        tokReqMsgCtx.setRefreshTokenvalidityPeriod(existingToken.getRefreshTokenValidityPeriodInMillis());
     }
 
     /**
