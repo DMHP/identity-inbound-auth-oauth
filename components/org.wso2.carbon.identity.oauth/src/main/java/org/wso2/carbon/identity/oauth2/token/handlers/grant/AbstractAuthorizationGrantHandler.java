@@ -470,9 +470,7 @@ public abstract class AbstractAuthorizationGrantHandler implements Authorization
             tokReqMsgCtx.setRefreshTokenIssuedTime(existingToken.getRefreshTokenIssuedTime().getTime());
         }
 
-        if (existingToken.getRefreshTokenIssuedTime() != null) {
-            tokReqMsgCtx.setRefreshTokenvalidityPeriod(existingToken.getRefreshTokenValidityPeriodInMillis());
-        }
+        tokReqMsgCtx.setRefreshTokenvalidityPeriod(existingToken.getRefreshTokenValidityPeriodInMillis());
     }
     /**
      * Returns access token expiry time in milliseconds for given access token.
