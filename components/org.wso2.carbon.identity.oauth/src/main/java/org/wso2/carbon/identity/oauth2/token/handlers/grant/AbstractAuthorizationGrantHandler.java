@@ -458,7 +458,6 @@ public abstract class AbstractAuthorizationGrantHandler implements Authorization
         }
     }
 
-
     private void setDetailsToMessageContext(OAuthTokenReqMessageContext tokReqMsgCtx, AccessTokenDO existingToken) {
 
         // Set access token and refresh token  issued time, this is needed by downstream handlers.
@@ -472,6 +471,7 @@ public abstract class AbstractAuthorizationGrantHandler implements Authorization
 
         tokReqMsgCtx.setRefreshTokenvalidityPeriod(existingToken.getRefreshTokenValidityPeriodInMillis());
     }
+
     /**
      * Returns access token expiry time in milliseconds for given access token.
      *
