@@ -709,9 +709,8 @@ public class SAML2BearerGrantHandler extends AbstractAuthorizationGrantHandler {
     private Assertion getAssertion(XMLObject samlObject) throws IdentityOAuth2Exception {
         if (samlObject instanceof Assertion) {
             return  (Assertion) samlObject;
-        } else {
-            throw new IdentityOAuth2Exception("Only Assertion objects are validated in SAML2Bearer Grant Type");
         }
+            throw new IdentityOAuth2Exception("Only Assertion objects are validated in SAML2Bearer Grant Type");
     }
 
     private void validateAssertionList(XMLObject samlObject) throws IdentityOAuth2Exception {
@@ -721,7 +720,6 @@ public class SAML2BearerGrantHandler extends AbstractAuthorizationGrantHandler {
         }
 
     }
-
 
     @Override
     public OAuth2AccessTokenRespDTO issue(OAuthTokenReqMessageContext tokenReqMsgCtx) throws IdentityOAuth2Exception {
