@@ -533,8 +533,16 @@ public class JWTTokenIssuer extends OauthTokenIssuerImpl {
                 }
             }
         }
+
+        boolean renewWithoutRevokingExistingEnabled = Boolean.parseBoolean(IdentityUtil.
+                getProperty(RENEW_TOKEN_WITHOUT_REVOKING_EXISTING_ENABLE_CONFIG));
+        // Set 'request binding type' based on the configuration "OAuth.JWT.RenewTokenWithoutRevokingExisting.Enable"
+        if (renewWithoutRevokingExistingEnabled) {
+            setRequestBindingType(tokenReqMessageContext);
+        }
+
         // Include token binding.
-        jwtClaimsSet = handleTokenBinding(jwtClaimsSetBuilder, tokenReqMessageContext);
+        jwtClaimsSet = getJwtClaimsSetWithBinding(jwtClaimsSetBuilder, tokenReqMessageContext);
 
         if (tokenReqMessageContext != null && tokenReqMessageContext.getProperty(CNF) != null) {
             jwtClaimsSet = handleCnf(jwtClaimsSetBuilder, tokenReqMessageContext);
@@ -786,8 +794,26 @@ public class JWTTokenIssuer extends OauthTokenIssuerImpl {
         return grantHandler.isOfTypeApplicationUser();
     }
 
-    private JWTClaimsSet handleTokenBinding(JWTClaimsSet.Builder jwtClaimsSetBuilder,
-                                            OAuthTokenReqMessageContext tokReqMsgCtx) {
+    private static JWTClaimsSet getJwtClaimsSetWithBinding(JWTClaimsSet.Builder jwtClaimsSetBuilder,
+                                                           OAuthTokenReqMessageContext tokReqMsgCtx) {
+
+        if (tokReqMsgCtx != null && tokReqMsgCtx.getTokenBinding() != null) {
+            // Include token binding into the jwt token.
+            String bindingType = tokReqMsgCtx.getTokenBinding().getBindingType();
+            jwtClaimsSetBuilder.claim(TOKEN_BINDING_REF, tokReqMsgCtx.getTokenBinding().getBindingReference());
+            jwtClaimsSetBuilder.claim(TOKEN_BINDING_TYPE, bindingType);
+            if (OAuth2Constants.TokenBinderType.CERTIFICATE_BASED_TOKEN_BINDER.equals(bindingType)) {
+                String cnf = tokReqMsgCtx.getTokenBinding().getBindingValue();
+                if (StringUtils.isNotBlank(cnf)) {
+                    jwtClaimsSetBuilder.claim(OAuthConstants.CNF, Collections.singletonMap(OAuthConstants.X5T_S256,
+                            tokReqMsgCtx.getTokenBinding().getBindingValue()));
+                }
+            }
+        }
+        return jwtClaimsSetBuilder.build();
+    }
+
+    private static void setRequestBindingType(OAuthTokenReqMessageContext tokReqMsgCtx) {
 
         /**
          * If OAuth.JWT.RenewTokenWithoutRevokingExisting is enabled from configurations, and current token
@@ -809,10 +835,8 @@ public class JWTTokenIssuer extends OauthTokenIssuerImpl {
          *     enable = true
          *     allowed_grant_types = ["client_credentials","password", ...]
          */
-        boolean renewWithoutRevokingExistingEnabled = Boolean.parseBoolean(IdentityUtil.
-                getProperty(RENEW_TOKEN_WITHOUT_REVOKING_EXISTING_ENABLE_CONFIG));
 
-        if (renewWithoutRevokingExistingEnabled && tokReqMsgCtx != null && tokReqMsgCtx.getTokenBinding() == null) {
+        if (tokReqMsgCtx != null && tokReqMsgCtx.getTokenBinding() == null) {
             if (OAuth2ServiceComponentHolder.getJwtRenewWithoutRevokeAllowedGrantTypes()
                     .contains(tokReqMsgCtx.getOauth2AccessTokenReqDTO().getGrantType())) {
                 String tokenBindingValue = UUID.randomUUID().toString();
@@ -821,21 +845,6 @@ public class JWTTokenIssuer extends OauthTokenIssuerImpl {
                                 tokenBindingValue));
             }
         }
-
-        if (tokReqMsgCtx != null && tokReqMsgCtx.getTokenBinding() != null) {
-            // Include token binding into the jwt token.
-            String bindingType = tokReqMsgCtx.getTokenBinding().getBindingType();
-            jwtClaimsSetBuilder.claim(TOKEN_BINDING_REF, tokReqMsgCtx.getTokenBinding().getBindingReference());
-            jwtClaimsSetBuilder.claim(TOKEN_BINDING_TYPE, bindingType);
-            if (OAuth2Constants.TokenBinderType.CERTIFICATE_BASED_TOKEN_BINDER.equals(bindingType)) {
-                String cnf = tokReqMsgCtx.getTokenBinding().getBindingValue();
-                if (StringUtils.isNotBlank(cnf)) {
-                    jwtClaimsSetBuilder.claim(OAuthConstants.CNF, Collections.singletonMap(OAuthConstants.X5T_S256,
-                            tokReqMsgCtx.getTokenBinding().getBindingValue()));
-                }
-            }
-        }
-        return jwtClaimsSetBuilder.build();
     }
 
     /**
